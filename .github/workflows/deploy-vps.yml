@@ -1,4 +1,4 @@
-name: Deploy OpenClaw Platform to VPS
+name: OpenClaw CI and controlled deployment
 
 on:
   pull_request:
@@ -8,16 +8,19 @@ on:
       - "openclaw-platform/**"
       - ".github/workflows/deploy-vps.yml"
   push:
-    branches:
-      - main
-    paths:
-      - "openclaw-platform/**"
-      - ".github/workflows/deploy-vps.yml"
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: Confirm deployment of the selected version tag to production
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
-  group: deploy-openclaw-platform-vps-${{ github.ref }}
-  cancel-in-progress: true
+  group: openclaw-platform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -29,23 +32,17 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    env:
-      DOTENV_CONFIG_PATH: /dev/null
-      GOOGLE_APPLICATION_CREDENTIALS: /tmp/openclaw-test-service-account.json
-      RECEIPT_SPREADSHEET_ID: test-only
-      RECEIPT_JOURNAL_PATH: /tmp/openclaw-test-receipt-journal.md
-      RECEIPT_SAVE_JOURNAL: "false"
-      RECEIPT_SAVE_SHEETS: "false"
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: openclaw-platform
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -57,13 +54,48 @@ jobs:
       - name: Compile TypeScript
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      - name: Run offline PR tests
+        if: github.event_name == 'pull_request'
+        run: npm run test:finance && npm run validate-schema && npm run check-classification
+
+      - name: Validate release tag
+        if: >-
+          github.ref_type == 'tag' ||
+          (github.event_name == 'workflow_dispatch' && inputs.deploy_production)
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]] || ! [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Select a version tag like v1.2.3; deployments must run from a version tag." >&2
+            exit 1
+          fi
+
+  secret-scan:
+    name: Scan pull request for leaked secrets
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan for leaked secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
 
   deploy:
     name: Deploy to VPS
-    if: github.event_name != 'pull_request'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_production &&
+      github.ref_type == 'tag' &&
+      startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: build
     environment: production
 
@@ -79,7 +111,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate required secrets
         run: |
