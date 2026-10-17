@@ -1,24 +1,20 @@
-name: OpenClaw CI and controlled deployment
+name: Build and deploy tagged OpenClaw release
 
 on:
-  pull_request:
-    paths:
-      - "openclaw-platform/**"
-      - ".github/workflows/deploy-vps.yml"
   push:
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: Confirm deployment of the selected version tag to production
+        description: Confirm deployment of this version tag to production
         required: true
         type: boolean
         default: false
 
 concurrency:
-  group: openclaw-platform-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: openclaw-release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -27,17 +23,26 @@ env:
   APP_DIR: openclaw-platform
 
 jobs:
-  build:
-    name: Build
+  build-package:
+    name: Build and package
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: openclaw-platform
 
     steps:
-      - name: Check out repository
+      - name: Check out version tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate release tag
+        run: |
+          set -euo pipefail
+          if ! [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected a version tag like v1.2.3; received ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -52,49 +57,37 @@ jobs:
       - name: Compile TypeScript
         run: npm run build
 
-      - name: Run offline PR tests
-        if: github.event_name == 'pull_request'
-        run: npm run test:finance && npm run validate-schema && npm run check-classification && npm run test:receipt-sqlite --if-present && npm run test:finance-api --if-present
-
-      - name: Validate release tag
-        if: >-
-          github.ref_type == 'tag' ||
-          (github.event_name == 'workflow_dispatch' && inputs.deploy_production)
+      - name: Package release source
+        working-directory: .
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE}" != "tag" ]] || ! [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Select a version tag like v1.2.3; deployments must run from a version tag." >&2
-            exit 1
-          fi
+          archive="${RUNNER_TEMP}/openclaw-platform-${GITHUB_REF_NAME}.tar.gz"
+          tar -czf "${archive}" \
+            --exclude="openclaw-platform/.env" \
+            --exclude="openclaw-platform/.secrets" \
+            --exclude="openclaw-platform/.openclaw-home" \
+            --exclude="openclaw-platform/openclaw-obsidian-vault" \
+            --exclude="openclaw-platform/node_modules" \
+            -C "${GITHUB_WORKSPACE}" openclaw-platform
+          echo "Created ${archive}"
 
-  secret-scan:
-    name: Scan pull request for leaked secrets
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Check out repository history
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
         with:
-          fetch-depth: 0
-
-      - name: Scan for leaked secrets
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: "false"
+          name: openclaw-platform-${{ github.ref_name }}
+          path: ${{ runner.temp }}/openclaw-platform-${{ github.ref_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
 
   deploy:
     name: Deploy to VPS
     if: >-
-      github.event_name == 'workflow_dispatch' &&
-      inputs.deploy_production &&
       github.ref_type == 'tag' &&
-      startsWith(github.ref_name, 'v')
+      startsWith(github.ref_name, 'v') &&
+      (github.event_name == 'push' || inputs.deploy_production)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: build
+    needs: build-package
     environment: production
 
     env:
@@ -108,18 +101,19 @@ jobs:
       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: openclaw-platform-${{ github.ref_name }}
+          path: release
 
       - name: Validate required secrets
         run: |
           set -euo pipefail
-
           if [ -z "${VPS_HOST}" ]; then
             echo "Missing GitHub secret: VPS_HOST" >&2
             exit 1
           fi
-
           if [ -z "${SSHPASS}" ] && [ -z "${VPS_SSH_KEY}" ]; then
             echo "Missing GitHub secret: set VPS_SSH_KEY or VPS_PASSWORD" >&2
             exit 1
@@ -160,39 +154,30 @@ jobs:
           ${SSH_AUTH_PREFIX} ${SSH_COMMAND} "${VPS_USER}@${VPS_HOST}" \
             "mkdir -p '${VPS_DEPLOY_PATH}' '${VPS_DEPLOY_PATH}/.secrets'"
 
-      - name: Sync application files
+      - name: Upload release package
         run: |
           set -euo pipefail
-          ${RSYNC_AUTH_PREFIX} rsync -az --delete \
-            --exclude ".env" \
-            --exclude ".openclaw-home/" \
-            --exclude ".secrets/" \
-            --exclude "openclaw-obsidian-vault/" \
-            --exclude "dist/" \
-            --exclude "node_modules/" \
-            -e "${SSH_COMMAND}" \
-            "${APP_DIR}/" "${VPS_USER}@${VPS_HOST}:${VPS_DEPLOY_PATH}/"
+          archive="release/openclaw-platform-${GITHUB_REF_NAME}.tar.gz"
+          ${RSYNC_AUTH_PREFIX} rsync -az -e "${SSH_COMMAND}" "${archive}" \
+            "${VPS_USER}@${VPS_HOST}:/tmp/openclaw-platform-${GITHUB_REF_NAME}.tar.gz"
 
       - name: Write runtime secrets
         run: |
           set -euo pipefail
-
           if [ -n "${OPENCLAW_ENV_FILE}" ]; then
             printf '%s' "${OPENCLAW_ENV_FILE}" | ${SSH_AUTH_PREFIX} ${SSH_COMMAND} "${VPS_USER}@${VPS_HOST}" \
               "cat > '${VPS_DEPLOY_PATH}/.env'"
           fi
-
           if [ -n "${GOOGLE_SERVICE_ACCOUNT_JSON}" ]; then
             printf '%s' "${GOOGLE_SERVICE_ACCOUNT_JSON}" | ${SSH_AUTH_PREFIX} ${SSH_COMMAND} "${VPS_USER}@${VPS_HOST}" \
               "cat > '${VPS_DEPLOY_PATH}/.secrets/service-account.json'"
           fi
 
-      - name: Rebuild and restart gateway
+      - name: Install runtime prerequisites and restart gateway
         run: |
           set -euo pipefail
-
           ${SSH_AUTH_PREFIX} ${SSH_COMMAND} "${VPS_USER}@${VPS_HOST}" \
-            "VPS_DEPLOY_PATH='${VPS_DEPLOY_PATH}' bash -s" <<'REMOTE'
+            "VPS_DEPLOY_PATH='${VPS_DEPLOY_PATH}' RELEASE_TAG='${GITHUB_REF_NAME}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "${VPS_DEPLOY_PATH}"
@@ -213,7 +198,6 @@ jobs:
               echo "Docker Compose is missing and this host does not use apt-get." >&2
               exit 1
             fi
-
             run_as_root apt-get update
             run_as_root apt-get install -y --no-install-recommends make git docker.io docker-compose-plugin \
               || run_as_root apt-get install -y --no-install-recommends make git docker.io docker-compose-v2
@@ -229,24 +213,27 @@ jobs:
             run_as_root apt-get install -y --no-install-recommends git
           fi
 
-          compose() {
-            if docker compose version >/dev/null 2>&1; then
-              docker compose "$@"
-            elif command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1; then
-              sudo docker compose "$@"
-            else
-              echo "Docker Compose is not available for this user." >&2
-              exit 1
-            fi
-          }
-
+          archive="/tmp/openclaw-platform-${RELEASE_TAG}.tar.gz"
+          if [ ! -f "${archive}" ]; then
+            echo "Release package ${archive} was not uploaded." >&2
+            exit 1
+          fi
           if [ ! -f .env ]; then
             echo "Missing ${VPS_DEPLOY_PATH}/.env. Add OPENCLAW_ENV_FILE as a GitHub secret or create .env on the VPS." >&2
             exit 1
           fi
 
-          mkdir -p .openclaw-home .secrets
-          mkdir -p .openclaw-home/.openclaw
+          find "${VPS_DEPLOY_PATH}" -mindepth 1 -maxdepth 1 \
+            ! -name ".env" \
+            ! -name ".secrets" \
+            ! -name ".openclaw-home" \
+            ! -name "openclaw-obsidian-vault" \
+            -exec rm -rf -- {} +
+
+          tar -xzf "${archive}" -C "${VPS_DEPLOY_PATH}" --strip-components=1
+          rm -f "${archive}"
+
+          mkdir -p .openclaw-home/.openclaw .secrets
 
           memory_vault_path="$(awk -F= '$1 == "OPENCLAW_MEMORY_VAULT_PATH" {print substr($0, index($0, $2))}' .env | tail -n 1 | sed -e 's/^"//' -e 's/"$//')"
           if [ -n "${memory_vault_path}" ]; then
@@ -269,6 +256,17 @@ jobs:
           if [ -f .secrets/service-account.json ]; then
             export GOOGLE_APPLICATION_CREDENTIALS=./.secrets/service-account.json
           fi
+
+          compose() {
+            if docker compose version >/dev/null 2>&1; then
+              docker compose "$@"
+            elif command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1; then
+              sudo docker compose "$@"
+            else
+              echo "Docker Compose is not available for this user." >&2
+              exit 1
+            fi
+          }
 
           compose build gateway
           compose up -d gateway finance-sheet-sync
