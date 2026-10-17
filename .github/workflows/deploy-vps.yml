@@ -56,7 +56,7 @@ jobs:
 
       - name: Run offline PR tests
         if: github.event_name == 'pull_request'
-        run: npm run test:finance && npm run test:receipt-pdf
+        run: npm run test:finance && npm run validate-schema && npm run check-classification
 
       - name: Validate release tag
         if: >-
