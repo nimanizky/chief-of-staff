@@ -218,6 +218,10 @@ jobs:
             echo "Release package ${archive} was not uploaded." >&2
             exit 1
           fi
+          if ! tar -tzf "${archive}" >/dev/null; then
+            echo "Release package ${archive} is not a valid tar archive." >&2
+            exit 1
+          fi
           if [ ! -f .env ]; then
             echo "Missing ${VPS_DEPLOY_PATH}/.env. Add OPENCLAW_ENV_FILE as a GitHub secret or create .env on the VPS." >&2
             exit 1
