@@ -63,6 +63,8 @@ Fill `.env` values:
 - `RECEIPT_JOURNAL_PATH` (recommended: `<vault>/memory/receipts/receipt-journal.md`)
 - `FINANCE_SQLITE_PATH` (default `./data/finance.sqlite`; Docker stores it in a persistent named volume)
 - `RECEIPT_SHEETS_SYNC_INTERVAL_MS` (default `30000`; background mirror check interval)
+- `FINANCE_API_ENABLED` (`false` by default; enables the optional Finance REST/MCP listener)
+- `FINANCE_API_TOKEN` (private bearer token, at least 32 random characters; required when the API is enabled)
 - `WISHLIST_FILE_PATH` (optional; defaults to `<vault>/memory/wishlists/backlog-wishlist.md`)
 - `WISHLIST_ALLOWED_GROUPS` (comma-separated WhatsApp group ids allowed to edit wishlist memory; `*` allows any WhatsApp group that reaches this task)
 
@@ -519,6 +521,21 @@ make backfill INPUT=./backfill.json
 
 Script:
 - [backfill_receipts.ts](/Users/nurrizky/dev/chief-of-staff/openclaw-platform/src/scripts/backfill_receipts.ts)
+
+## Finance REST API and MCP
+
+The optional Finance API and MCP share the same validated receipt application and SQLite-first
+write path. They are disabled by default and run under the existing gateway container; no
+ChatGPT plugin or separate Finance database is created. The API contract, all four HTTP routes,
+three MCP tools, request/response examples, local run steps, and credential-free tests are in
+[docs/finance-mcp-api.md](./docs/finance-mcp-api.md). A machine-readable HTTP contract is in
+[docs/finance-api.openapi.yaml](./docs/finance-api.openapi.yaml).
+
+Run its focused credential-free contract test with:
+
+```bash
+npm run test:finance-api
+```
 
 ## Utility targets
 

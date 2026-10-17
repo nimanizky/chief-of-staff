@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:cicilan && npm run test:receipt-pdf && npm run test:wishlist && npm run test:finance && npm run test:wealth && npm run test:budget",
+    "test": "npm run test:cicilan && npm run test:receipt-pdf && npm run test:wishlist && npm run test:finance && npm run test:wealth && npm run test:budget && npm run test:finance-api",
     "build": "tsc -p tsconfig.json",
     "validate-schema": "tsx src/scripts/validate_receipt_schema.ts",
     "check-classification": "tsx src/scripts/check_receipt_classification.ts",
@@ -15,6 +15,7 @@
     "test:receipt-pdf": "tsx src/scripts/test_receipt_pdf_routing.ts",
     "test:wishlist": "tsx src/scripts/test_wishlist_assistant.ts",
     "test:finance": "tsx src/scripts/test_finance_digest.ts",
+    "test:finance-api": "npm run build && node dist/scripts/test_finance_api.js",
     "test:receipt-sqlite": "npm run build && node dist/scripts/test_receipt_sqlite.js",
     "finance:digest:preview": "tsx src/scripts/send_finance_digest.ts --preview --force",
     "finance:digest:send": "tsx src/scripts/send_finance_digest.ts",
@@ -28,6 +29,8 @@
     "@grammyjs/runner": "^2.0.3",
     "@grammyjs/transformer-throttler": "^1.2.1",
     "@larksuiteoapi/node-sdk": "^1.60.0",
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.1",
     "dotenv": "^16.4.7",
     "googleapis": "^144.0.0",
     "grammy": "^1.42.0",
@@ -36,6 +39,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
     "@types/node": "^22.14.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
