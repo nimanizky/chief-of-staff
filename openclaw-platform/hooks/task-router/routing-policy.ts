@@ -59,16 +59,6 @@ function normalizePolicy(key: string, policy?: ChannelPolicy): ResolvedChannelPo
   };
 }
 
-function envBool(name: string, fallback: boolean): boolean {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
-}
-
-function useWishlistExactDispatch(): boolean {
-  return envBool("WISHLIST_EXACT_DISPATCH", true);
-}
-
 function chatKeys(context: TaskRouterContext): string[] {
   const keys = new Set<string>();
   const source = context.sourcePlatform || "openclaw";
@@ -144,8 +134,8 @@ export function shouldRunTaskModule(context: TaskRouterContext, policy: Resolved
     return policy.modules.includes("wealth-assistant");
   }
   if (trigger.kind === "wishlist-assistant") {
-    if (context.sourcePlatform === "whatsapp" && useWishlistExactDispatch()) return false;
-    return policy.modules.includes("wishlist-assistant") || context.sourcePlatform === "whatsapp";
+    if (context.sourcePlatform === "whatsapp") return false;
+    return policy.modules.includes("wishlist-assistant");
   }
   if (trigger.kind === "calory-assistant") return policy.modules.includes("calory-assistant");
   if (trigger.kind === "missing-media" && trigger.task === "calory-assistant") {
@@ -159,7 +149,7 @@ export function shouldSuppressDefaultAgent(context: TaskRouterContext, policy: R
   if (shouldLetDefaultAgentHandle(context, policy)) return false;
   const trigger = detectTaskTrigger(context.text, mediaKind(context));
   if (trigger.kind === "wishlist-assistant" && context.sourcePlatform === "whatsapp") {
-    return !useWishlistExactDispatch();
+    return false;
   }
   return shouldGateDefaultAgentReply(context.text, mediaKind(context)) || !policy.modules.includes("general-chat");
 }

@@ -66,6 +66,7 @@ const EnvSchema = z.object({
   OPENCLAW_MEMORY_GIT_AUTO_PUSH: BoolLikeSchema.default(false),
   WISHLIST_FILE_PATH: z.string().min(1).optional(),
   WISHLIST_ALLOWED_GROUPS: z.string().default("120363408773982912@g.us"),
+  WISHLIST_MODE: z.enum(["deterministic", "tool", "hybrid", "legacy"]).optional(),
   WISHLIST_EXACT_DISPATCH: BoolLikeSchema.default(true),
   WISHLIST_MODEL_CLASSIFIER: BoolLikeSchema.default(true),
   WISHLIST_MODEL_NAME: z.string().min(1).default("gemini-3.1-flash-lite"),

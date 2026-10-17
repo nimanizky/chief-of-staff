@@ -331,9 +331,18 @@ successful memory writes in the vault repo. Set `OPENCLAW_MEMORY_GIT_AUTO_PUSH=t
 when you also want those commits pushed to the vault remote.
 
 Wishlist memory lives at `memory/wishlists/backlog-wishlist.md` by default. The
-`wishlist-assistant` task is deterministic and is intended for the WhatsApp
-Backlog/Wishlist group only. With the group configured as `requireMention=true`,
-trigger it by natively mentioning the bot in WhatsApp and sending commands:
+`wishlist-assistant` task is intended for the WhatsApp Backlog/Wishlist group
+only. With the group configured as `requireMention=true`, trigger it by natively
+mentioning the bot in WhatsApp.
+
+Wishlist behavior is controlled by `WISHLIST_MODE`:
+
+- `deterministic`: clear commands are handled by local code and return exact `[md-bot]` replies.
+- `tool`: the model can call the narrow `wishlist_update` tool; the tool writes and commits the Markdown file.
+- `hybrid`: clear commands use deterministic handling, messy/natural requests can use `wishlist_update`.
+- `legacy`: disables the wishlist special path and lets the normal OpenClaw agent handle messages.
+
+Use commands like:
 
 ```text
 show ykc
@@ -346,6 +355,13 @@ add bandung food: batagor kingsley
 done ykc rumah makan godean
 undone ykc rumah makan godean
 ```
+
+In `hybrid` or `tool` mode, wishlist-like messages also receive the quoted
+WhatsApp bubble text, when OpenClaw exposes it, plus the current
+`backlog-wishlist.md` content as read-only model context. The model can use
+that context to call the narrow `wishlist_update` tool for fuzzy requests such
+as `mark remote kipas done` or `add this into action list`; the tool still
+writes and commits only the configured wishlist Markdown file.
 
 Pasting a full block that starts with a board title such as `YKC WISHLIST`,
 `!!! JKT WISHLIST !!!`, or `FRIENDSHIP BACKLOG` imports/upserts that board.

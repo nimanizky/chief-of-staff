@@ -38,6 +38,9 @@ Supported JSON shape:
 Rules:
 - Use action "noop" when the message is not asking to save, show, add, mark done, mark pending, or import a wishlist/backlog.
 - A board is a flexible key such as ykc, jkt, action, friendship, bali, bandung.
+- The input may contain USER_MESSAGE, QUOTED_WHATSAPP_MESSAGE, and CURRENT_WISHLIST_MARKDOWN sections.
+- If the user says "this", "that", "these", or "quoted", use QUOTED_WHATSAPP_MESSAGE as the referenced content.
+- If the user asks to mark/edit an existing item, use CURRENT_WISHLIST_MARKDOWN and/or QUOTED_WHATSAPP_MESSAGE to infer board and query.
 - For "show action", board is "action".
 - For "save all of this as ykc", action is "import", board is "ykc".
 - For "put this into action list", action is "import", board is "action".
@@ -128,11 +131,11 @@ async function callGeminiWishlistClassifier(rawText: string, apiKey: string, mod
 }
 
 function extractImportContent(rawText: string, board: string, modelContent?: string): string {
-  const rawCandidate = stripCommandLines(rawText, board);
-  if (looksLikeImportBlock(rawCandidate)) return rawCandidate;
-
   const modelCandidate = normalizeBlock(modelContent ?? "");
   if (looksLikeImportBlock(modelCandidate)) return modelCandidate;
+
+  const rawCandidate = stripCommandLines(rawText, board);
+  if (looksLikeImportBlock(rawCandidate)) return rawCandidate;
 
   return rawCandidate;
 }
