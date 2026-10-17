@@ -45,6 +45,8 @@ const EnvSchema = z.object({
   RECEIPT_JOURNAL_PATH: z.string().min(1),
   RECEIPT_SAVE_JOURNAL: BoolLikeSchema.default(true),
   RECEIPT_SAVE_SHEETS: BoolLikeSchema.default(true),
+  FINANCE_SQLITE_PATH: z.string().min(1).default("./data/finance.sqlite"),
+  RECEIPT_SHEETS_SYNC_INTERVAL_MS: z.coerce.number().int().min(1_000).default(30_000),
   RECEIPT_CONFIRMATION_TTL_MS: z.coerce.number().int().min(1).default(30 * 60 * 1000),
   RECEIPT_PAYMENT_METHODS: z.string().default("cc-bca,db-bca,cc-bri,db-jago,db-cash,bca,cc-jenius,cash,spaylater"),
   RECEIPT_PAYMENT_METHOD_ALIASES: z

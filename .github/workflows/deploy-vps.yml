@@ -2,8 +2,6 @@ name: OpenClaw CI and controlled deployment
 
 on:
   pull_request:
-    branches:
-      - main
     paths:
       - "openclaw-platform/**"
       - ".github/workflows/deploy-vps.yml"
@@ -56,7 +54,7 @@ jobs:
 
       - name: Run offline PR tests
         if: github.event_name == 'pull_request'
-        run: npm run test:finance && npm run validate-schema && npm run check-classification
+        run: npm run test:finance && npm run validate-schema && npm run check-classification && npm run test:receipt-sqlite --if-present && npm run test:finance-api --if-present
 
       - name: Validate release tag
         if: >-
@@ -273,6 +271,6 @@ jobs:
           fi
 
           compose build gateway
-          compose up -d gateway
+          compose up -d gateway finance-sheet-sync
           compose ps
           REMOTE
