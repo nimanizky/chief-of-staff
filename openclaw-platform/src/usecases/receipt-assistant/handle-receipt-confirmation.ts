@@ -2,6 +2,7 @@ import { env } from "../../config/env.js";
 import { formatReceiptFailureMessage, prefixReceiptLabel } from "../../domains/receipts/receipt-formatting.js";
 import { isReceiptPaymentMethod } from "../../domains/receipts/receipt-payment-method.js";
 import type { ReceiptPayload } from "../../domains/receipts/receipt.schema.js";
+import { financeApplication } from "../../modules/finance/finance-runtime.js";
 import type { ConfirmationAction } from "./receipt-confirmation-store.js";
 import {
   deletePendingConfirmation,
@@ -11,7 +12,6 @@ import {
 import {
   formatConfirmedReceiptSaveMessage,
   hasFailedEnabledSink,
-  saveConfirmedReceipt
 } from "./save-confirmed-receipt.js";
 
 export type ReceiptConfirmationResult = {
@@ -64,7 +64,7 @@ export async function handleReceiptConfirmation(action: ConfirmationAction): Pro
   }
 
   try {
-    const result = await saveConfirmedReceipt(payload);
+    const result = await financeApplication.recordConfirmedReceipt(payload);
     const prefix = prefixReceiptLabel(
       pending.mediaIndex,
       pending.totalMedia,

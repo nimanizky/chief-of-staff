@@ -1,0 +1,326 @@
+openapi: 3.1.0
+info:
+  title: Chief of Staff Finance API
+  version: 1.0.0
+  description: Authenticated structured-receipt intake shared with the Finance MCP tools.
+servers:
+  - url: http://127.0.0.1:3100
+paths:
+  /healthz:
+    get:
+      operationId: getFinanceHealth
+      summary: Check API liveness
+      description: Does not check SQLite or Google Sheets availability.
+      responses:
+        '200':
+          description: API process is responding.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    const: ok
+                required: [status]
+                additionalProperties: false
+  /api/v1/finance/payment-methods:
+    get:
+      operationId: listFinancePaymentMethods
+      summary: List configured payment methods
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Exact payment_method values accepted by preview and record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_methods:
+                    type: array
+                    items:
+                      type: string
+                required: [payment_methods]
+                additionalProperties: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/finance/receipts/preview:
+    post:
+      operationId: previewFinanceReceipt
+      summary: Validate a receipt without saving it
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptInput'
+      responses:
+        '200':
+          description: Normalized preview; no data was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptPreview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+  /api/v1/finance/receipts:
+    post:
+      operationId: recordFinanceReceipt
+      summary: Persist a user-confirmed receipt
+      description: Writes the canonical SQLite row and queues the Google Sheets mirror. Reuse idempotency_key for retries.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmedReceiptInput'
+      responses:
+        '201':
+          description: New canonical receipt saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptRecordResult'
+        '200':
+          description: Idempotency key matched an existing canonical receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptRecordResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          description: Canonical SQLite persistence failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque token; minimum 32 characters
+  responses:
+    BadRequest:
+      description: Invalid JSON or Finance request fields.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unauthorized:
+      description: Missing or incorrect bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    TooLarge:
+      description: Request body exceeds 64 KiB.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    UnsupportedMediaType:
+      description: Request Content-Type is not application/json.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    ReceiptInput:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+          description: Use a unique UUID for each receipt and reuse it on retries.
+        merchant_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        receipt_date:
+          type: string
+          format: date
+          description: Real calendar date in YYYY-MM-DD format.
+        total_amount:
+          type: number
+          minimum: 0
+        tax_amount:
+          type: number
+          minimum: 0
+          default: 0
+        payment_method:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Must match a configured value from GET /api/v1/finance/payment-methods.
+        tax_label_raw:
+          type: string
+          maxLength: 120
+          default: ''
+        classification:
+          type: string
+          enum: [food, mobility, groceries, nonfood, subscription, income]
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          default: IDR
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+        - idempotency_key
+        - merchant_name
+        - receipt_date
+        - total_amount
+        - payment_method
+        - classification
+        - confidence
+      additionalProperties: false
+    ConfirmedReceiptInput:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+          description: Use a unique UUID for each receipt and reuse it on retries.
+        merchant_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        receipt_date:
+          type: string
+          format: date
+          description: Real calendar date in YYYY-MM-DD format.
+        total_amount:
+          type: number
+          minimum: 0
+        tax_amount:
+          type: number
+          minimum: 0
+          default: 0
+        payment_method:
+          type: string
+          minLength: 1
+          maxLength: 80
+        tax_label_raw:
+          type: string
+          maxLength: 120
+          default: ''
+        classification:
+          type: string
+          enum: [food, mobility, groceries, nonfood, subscription, income]
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          default: IDR
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        user_confirmed:
+          const: true
+      required:
+        - idempotency_key
+        - merchant_name
+        - receipt_date
+        - total_amount
+        - payment_method
+        - classification
+        - confidence
+        - user_confirmed
+      additionalProperties: false
+    ReceiptPreview:
+      type: object
+      properties:
+        receipt_id:
+          type: string
+        merchant_name:
+          type: string
+        receipt_date:
+          type: string
+          format: date
+        total_amount:
+          type: number
+        tax_amount:
+          type: number
+        payment_method:
+          type: string
+        classification:
+          type: string
+        currency:
+          type: string
+        confidence:
+          type: number
+        needs_review:
+          type: boolean
+        review_reason:
+          type: string
+        writes_data:
+          const: false
+      required:
+        - receipt_id
+        - merchant_name
+        - receipt_date
+        - total_amount
+        - tax_amount
+        - payment_method
+        - classification
+        - currency
+        - confidence
+        - needs_review
+        - writes_data
+      additionalProperties: false
+    ReceiptRecordResult:
+      type: object
+      properties:
+        receipt_id:
+          type: string
+        storage_status:
+          enum: [saved, duplicate]
+        sheet_sync_status:
+          enum: [saved, duplicate, queued, skipped, failed]
+        journal_status:
+          enum: [saved, duplicate, queued, skipped, failed]
+        needs_review:
+          type: boolean
+        partial:
+          type: boolean
+      required: [receipt_id, storage_status, sheet_sync_status, journal_status, needs_review, partial]
+      additionalProperties: false
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required: [code, message]
+          additionalProperties: false
+      required: [error]
+      additionalProperties: false

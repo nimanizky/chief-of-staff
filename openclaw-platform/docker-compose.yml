@@ -10,6 +10,8 @@ services:
       OPENCLAW_HOME: /app/.openclaw-home
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-service-account.json
       FINANCE_SQLITE_PATH: /app/data/finance.sqlite
+      FINANCE_API_PORT: 3100
+      FINANCE_API_BIND_HOST: 0.0.0.0
       NODE_OPTIONS: --dns-result-order=ipv4first
     volumes:
       - ./.openclaw-home:/app/.openclaw-home
@@ -18,6 +20,8 @@ services:
       - ./hooks:/app/hooks:ro
       - ${OPENCLAW_MEMORY_VAULT_PATH:-../openclaw-obsidian-vault}:${OPENCLAW_MEMORY_VAULT_PATH:-/app/openclaw-obsidian-vault}
       - ${GOOGLE_APPLICATION_CREDENTIALS:-./.secrets/service-account.json}:/run/secrets/google-service-account.json:ro
+    ports:
+      - "127.0.0.1:${FINANCE_API_HOST_PORT:-3100}:3100"
     tty: true
     stdin_open: true
     restart: unless-stopped

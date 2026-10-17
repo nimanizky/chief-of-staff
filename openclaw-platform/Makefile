@@ -99,7 +99,7 @@ onboard:
 	$(OPENCLAW) onboard
 
 gateway: build config-sync
-	$(OPENCLAW) gateway
+	node dist/scripts/run_gateway_with_finance_api.js
 
 pairing-list-telegram:
 	$(OPENCLAW) pairing list telegram
