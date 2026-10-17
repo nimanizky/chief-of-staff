@@ -4,7 +4,8 @@ Local implementation for RFC-001:
 - Telegram receipt intake (media-first flow; `/receipt` remains optional)
 - Mistral extraction (`mistral-small-latest`)
 - `receipt.v1.1` validation
-- Google Sheets append to `receipts_raw` + `monthly_breakdown` formula bootstrap
+- SQLite canonical storage with an asynchronous Google Sheets mirror to `receipts_raw`
+- `monthly_breakdown` formula bootstrap after each successful sheet sync
 
 ## Local-first OpenClaw
 
@@ -15,7 +16,7 @@ This project is set up to prefer a project-local OpenClaw binary.
 - `OPENCLAW_HOME` defaults to `openclaw-platform/.openclaw-home`
 - Global OpenClaw is only used if `OPENCLAW_ALLOW_GLOBAL=1` is set
 
-`openclaw` is pinned in this repo (`openclaw@2026.4.8`) and installed via `npm install`.
+`openclaw` is pinned in this repo (`openclaw@2026.10.4`) and installed via `npm install`.
 
 ## Step-by-step (Local Telegram end-to-end)
 
@@ -60,6 +61,8 @@ Fill `.env` values:
 - `OPENCLAW_MEMORY_GIT_AUTO_COMMIT` (`true` = commit memory file changes after writes)
 - `OPENCLAW_MEMORY_GIT_AUTO_PUSH` (`true` = push memory commits to the vault remote after commit)
 - `RECEIPT_JOURNAL_PATH` (recommended: `<vault>/memory/receipts/receipt-journal.md`)
+- `FINANCE_SQLITE_PATH` (default `./data/finance.sqlite`; Docker stores it in a persistent named volume)
+- `RECEIPT_SHEETS_SYNC_INTERVAL_MS` (default `30000`; background mirror check interval)
 - `WISHLIST_FILE_PATH` (optional; defaults to `<vault>/memory/wishlists/backlog-wishlist.md`)
 - `WISHLIST_ALLOWED_GROUPS` (comma-separated WhatsApp group ids allowed to edit wishlist memory; `*` allows any WhatsApp group that reaches this task)
 
@@ -67,6 +70,33 @@ Receipt parser provider/model selection lives in `config/providers.json`, not `.
 
 Telegram chat routing lives in `config/channel-routing.json`. For finance-only chats, omit
 `general-chat` so media routes directly to receipt parsing and the default OpenClaw agent is suppressed.
+
+## Receipt storage and Google Sheets mirror
+
+A parsed receipt is still only a preview until it is confirmed. On confirmation, OpenClaw writes
+one canonical row to SQLite, keyed by `receipt_id`, then queues that row for the Sheets worker.
+The first 14 SQLite data columns use the same names and order as `receipts_raw` A:N; additional
+SQLite columns retain the original validated payload and track sync attempts. SQLite is the
+source of truth; edits made directly in Google Sheets do not sync back into SQLite.
+
+Docker Compose persists the database in its `finance-data` named volume at
+`/app/data/finance.sqlite`. The `finance-sheet-sync` service retries queued rows with backoff;
+`docker compose down` keeps this volume unless explicitly given `--volumes`/`-v`.
+For a non-Docker local gateway, start `make finance-sheets-sync` in a second terminal;
+`make docker-up` starts the worker automatically.
+
+Run the offline SQLite test with:
+
+```bash
+npm run test:receipt-sqlite
+```
+
+The SQLite test uses a temporary database and does not read credentials or call Google APIs.
+For a one-off retry of queued sheet rows when running with a configured `.env`, use:
+
+```bash
+npm run finance:sheets-sync:once
+```
 
 ## 3) Prepare Google Sheet
 
@@ -133,7 +163,13 @@ Then set `channels.telegram.allowFrom` to `telegram:<your_numeric_user_id>`.
 make gateway
 ```
 
-In another terminal, follow logs:
+For a non-Docker local run, start the Sheets mirror worker in a second terminal:
+
+```bash
+make finance-sheets-sync
+```
+
+In another terminal, follow gateway logs:
 
 ```bash
 make logs
@@ -149,7 +185,8 @@ Income mode:
 
 Expected result:
 - Telegram first sends parsed fields with `Confirm` / `Cancel` buttons
-- Row is appended to `receipts_raw` only after `Confirm`
+- `Confirm` writes the canonical row to SQLite and queues it for `receipts_raw`
+- The worker appends the Sheet row and retries transient failures automatically
 - `monthly_breakdown!A1` formula auto-created if empty
 
 PDF behavior:
@@ -363,6 +400,12 @@ Watch live logs:
 docker compose logs -f gateway
 ```
 
+Watch the SQLite-to-Sheets mirror worker:
+
+```bash
+docker compose logs -f finance-sheet-sync
+```
+
 Show recent logs:
 
 ```bash
@@ -375,6 +418,12 @@ Restart the app:
 docker compose restart gateway
 ```
 
+Restart both finance services:
+
+```bash
+docker compose restart gateway finance-sheet-sync
+```
+
 Stop the app:
 
 ```bash
@@ -384,14 +433,14 @@ docker compose down
 Start the app:
 
 ```bash
-docker compose up -d gateway
+docker compose up -d gateway finance-sheet-sync
 ```
 
 Rebuild after code changes:
 
 ```bash
 docker compose build gateway
-docker compose up -d gateway
+docker compose up -d gateway finance-sheet-sync
 ```
 
 Enter the container shell:

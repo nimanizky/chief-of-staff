@@ -1,28 +1,10 @@
 import { env } from "../../config/env.js";
 import type { ReceiptPayload } from "../../domains/receipts/receipt.schema.js";
+import { toReceiptRawRow } from "../../domains/receipts/receipt-raw-row.js";
 import { createSheetsClient } from "./sheets_client.js";
 import { ReceiptError, getErrorStatus } from "../../errors/receipt_errors.js";
 
 export type AppendReceiptResult = "appended" | "duplicate";
-
-function toReceiptsRawRow(payload: ReceiptPayload): (string | number | boolean)[] {
-  return [
-    payload.receipt_id,
-    payload.source.message_id,
-    payload.merchant_name,
-    payload.receipt_date,
-    payload.total_amount,
-    payload.tax_amount,
-    payload.payment_method,
-    payload.classification,
-    payload.currency,
-    payload.confidence,
-    payload.needs_review,
-    payload.tax_label_raw,
-    payload.month_key,
-    JSON.stringify(payload.raw_json)
-  ];
-}
 
 export async function isDuplicateReceipt(receiptId: string): Promise<boolean> {
   try {
@@ -54,7 +36,7 @@ export async function appendReceiptsRawRow(payload: ReceiptPayload): Promise<App
       valueInputOption: "USER_ENTERED",
       requestBody: {
         majorDimension: "ROWS",
-        values: [toReceiptsRawRow(payload)]
+        values: [toReceiptRawRow(payload)]
       }
     });
     return "appended";

@@ -15,8 +15,11 @@
     "test:receipt-pdf": "tsx src/scripts/test_receipt_pdf_routing.ts",
     "test:wishlist": "tsx src/scripts/test_wishlist_assistant.ts",
     "test:finance": "tsx src/scripts/test_finance_digest.ts",
+    "test:receipt-sqlite": "npm run build && node dist/scripts/test_receipt_sqlite.js",
     "finance:digest:preview": "tsx src/scripts/send_finance_digest.ts --preview --force",
     "finance:digest:send": "tsx src/scripts/send_finance_digest.ts",
+    "finance:sheets-sync:once": "tsx src/scripts/sync_receipt_sheets.ts --once",
+    "finance:sheets-sync": "node dist/scripts/sync_receipt_sheets.js",
     "test:budget": "tsx src/scripts/test_budget_guardrail.ts",
     "budget:send": "node dist/scripts/send_budget_guardrail.js"
   },
@@ -29,7 +32,7 @@
     "googleapis": "^144.0.0",
     "grammy": "^1.42.0",
     "openai": "^4.104.0",
-    "openclaw": "2026.4.8",
+    "openclaw": "2026.10.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@ SHELL := /bin/bash
 OPENCLAW := ./scripts/openclaw-local.sh
 ENV_FILE := .env
 
-.PHONY: help install install-host env-check validate-schema build backfill parity-compare telegram-user-id finance-digest-preview finance-digest-send test-finance \
+.PHONY: help install install-host env-check validate-schema build backfill parity-compare telegram-user-id finance-digest-preview finance-digest-send finance-sheets-sync test-finance \
 	openclaw-version onboard gateway pairing-list-telegram pairing-approve-telegram \
 	logs status health doctor doctor-fix gateway-mode-local security-audit sandbox-enable sandbox-disable sandbox-explain \
 	sandbox-recreate sandbox-network-none sandbox-network-bridge sandbox-network-custom \
@@ -21,6 +21,7 @@ help:
 	@echo "  make test-finance"
 	@echo "  make finance-digest-preview"
 	@echo "  make finance-digest-send"
+	@echo "  make finance-sheets-sync"
 	@echo "  make openclaw-version"
 	@echo "  make onboard"
 	@echo "  make gateway"
@@ -87,6 +88,9 @@ finance-digest-preview: env-check
 
 finance-digest-send: env-check
 	npm run finance:digest:send
+
+finance-sheets-sync: env-check
+	npm run finance:sheets-sync
 
 openclaw-version:
 	$(OPENCLAW) --version
@@ -175,7 +179,7 @@ docker-build:
 	docker compose build
 
 docker-up:
-	docker compose up -d gateway
+	docker compose up -d gateway finance-sheet-sync
 
 docker-down:
 	docker compose down

@@ -104,7 +104,10 @@
     },
     "entries": {
       "task-gate": {
-        "enabled": true
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true
+        }
       },
       "openai": {
         "enabled": false

@@ -3,6 +3,7 @@ dist
 .env
 .openclaw-home
 .secrets
+data/
 *.log
 # Local cloud credentials
 gcp-service-acc.json

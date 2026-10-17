@@ -2,9 +2,9 @@ import { env } from "../../config/env.js";
 import type { ReceiptPayload } from "../../domains/receipts/receipt.schema.js";
 import { ReceiptError } from "../../errors/receipt_errors.js";
 import { prependReceiptJournalEntry } from "../../integrations/spreadsheets/receipt-journal.adapter.js";
-import { persistReceiptPayload } from "./save-receipt-row.js";
+import { saveReceiptToSqlite } from "../../integrations/sqlite/receipt-store.js";
 
-export type SinkSaveStatus = "saved" | "duplicate" | "skipped" | "failed";
+export type SinkSaveStatus = "saved" | "duplicate" | "queued" | "skipped" | "failed";
 
 export type SinkSaveResult = {
   enabled: boolean;
@@ -13,43 +13,53 @@ export type SinkSaveResult = {
 };
 
 export type ConfirmedReceiptSaveResult = {
+  sqlite: SinkSaveResult;
   journal: SinkSaveResult;
   sheets: SinkSaveResult;
 };
 
-function mapAppendResultToSinkStatus(result: "appended" | "duplicate"): SinkSaveStatus {
-  return result === "appended" ? "saved" : "duplicate";
-}
-
 export async function saveConfirmedReceipt(payload: ReceiptPayload): Promise<ConfirmedReceiptSaveResult> {
   const result: ConfirmedReceiptSaveResult = {
+    sqlite: {
+      enabled: true,
+      status: "failed"
+    },
     journal: {
       enabled: env.RECEIPT_SAVE_JOURNAL,
-      status: env.RECEIPT_SAVE_JOURNAL ? "failed" : "skipped"
+      status: "skipped"
     },
     sheets: {
       enabled: env.RECEIPT_SAVE_SHEETS,
-      status: env.RECEIPT_SAVE_SHEETS ? "failed" : "skipped"
+      status: "skipped"
     }
   };
 
+  let canonicalPayload: ReceiptPayload;
+  try {
+    const stored = saveReceiptToSqlite(payload, env.FINANCE_SQLITE_PATH);
+    canonicalPayload = stored.payload;
+    result.sqlite.status = stored.status;
+    if (env.RECEIPT_SAVE_SHEETS) {
+      result.sheets.status = stored.sheetsSyncedAt ? "duplicate" : "queued";
+    }
+  } catch (error) {
+    result.sqlite.error = error;
+    logSinkError("sqlite", error);
+    if (env.RECEIPT_SAVE_SHEETS) {
+      result.sheets.status = "failed";
+      result.sheets.error = new Error("Not queued because SQLite did not save the canonical receipt.");
+    }
+    return result;
+  }
+
   if (env.RECEIPT_SAVE_JOURNAL) {
     try {
-      result.journal.status = mapAppendResultToSinkStatus(await prependReceiptJournalEntry(payload));
+      const journalResult = await prependReceiptJournalEntry(canonicalPayload);
+      result.journal.status = journalResult === "appended" ? "saved" : "duplicate";
     } catch (error) {
       result.journal.status = "failed";
       result.journal.error = error;
       logSinkError("receipt_journal", error);
-    }
-  }
-
-  if (env.RECEIPT_SAVE_SHEETS) {
-    try {
-      result.sheets.status = mapAppendResultToSinkStatus(await persistReceiptPayload(payload));
-    } catch (error) {
-      result.sheets.status = "failed";
-      result.sheets.error = error;
-      logSinkError("google_sheets", error);
     }
   }
 
@@ -66,6 +76,7 @@ export function formatConfirmedReceiptSaveMessage(
   prefix: string
 ): string {
   const lines = [
+    `SQLite: ${formatSqliteSinkStatus(result.sqlite)}`,
     `${prefix}Journal: ${formatJournalSinkStatus(result.journal)}`,
     `Google Sheets: ${formatSheetsSinkStatus(result.sheets)}`,
     `Receipt: ${receiptId}`
@@ -76,6 +87,12 @@ export function formatConfirmedReceiptSaveMessage(
   }
 
   return lines.join("\n");
+}
+
+function formatSqliteSinkStatus(result: SinkSaveResult): string {
+  if (result.status === "saved") return "Saved as the canonical receipt.";
+  if (result.status === "duplicate") return "Already recorded; the original row remains canonical.";
+  return `Failed to save. ${formatSinkError(result.error)}`;
 }
 
 function formatJournalSinkStatus(result: SinkSaveResult): string {
@@ -89,6 +106,7 @@ function formatSheetsSinkStatus(result: SinkSaveResult): string {
   if (!result.enabled || result.status === "skipped") return "Skipped by config.";
   if (result.status === "saved") return `Saved to ${env.RECEIPT_SHEET_RAW}.`;
   if (result.status === "duplicate") return `Already recorded in ${env.RECEIPT_SHEET_RAW}.`;
+  if (result.status === "queued") return `Queued for automatic sync to ${env.RECEIPT_SHEET_RAW}.`;
   return `Failed to save. ${formatSinkError(result.error)}`;
 }
 
