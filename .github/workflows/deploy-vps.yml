@@ -276,3 +276,45 @@ jobs:
           compose up -d gateway finance-sheet-sync
           compose ps
           REMOTE
+
+  publish-release:
+    name: Publish GitHub Release
+    if: >-
+      github.ref_type == 'tag' &&
+      startsWith(github.ref_name, 'v') &&
+      needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: deploy
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: openclaw-platform-${{ github.ref_name }}
+          path: release
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          archive="release/openclaw-platform-${tag}.tar.gz"
+
+          if [ ! -f "${archive}" ]; then
+            echo "Built release package ${archive} was not found." >&2
+            exit 1
+          fi
+
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${archive}" --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${tag}" "${archive}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "OpenClaw ${tag}" \
+              --generate-notes \
+              --verify-tag
+          fi
