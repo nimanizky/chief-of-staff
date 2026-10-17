@@ -1,0 +1,98 @@
+name: Create version tag and start deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "openclaw-platform/**"
+
+concurrency:
+  group: create-openclaw-version-tag
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag-and-dispatch:
+    name: Tag merged release and start tagged pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Determine the next semantic version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # If this workflow is rerun for a commit that already has a tag,
+          # reuse that tag instead of creating a second release version.
+          release_tag="$(git tag --points-at "${GITHUB_SHA}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+
+          if [ -z "${release_tag}" ]; then
+            # Ignore stale queued runs; the newest main push will include these changes.
+            main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+            if [ "${main_sha}" != "${GITHUB_SHA}" ]; then
+              echo "A newer commit is already on main; skipping this stale tag run."
+              exit 0
+            fi
+
+            latest_tag="$(git tag --list 'v[0-9]*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+
+            if [ -z "${latest_tag}" ]; then
+              version="$(node -p "require('./openclaw-platform/package.json').version")"
+              if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "openclaw-platform/package.json must have a stable SemVer version; found ${version}." >&2
+                exit 1
+              fi
+              release_tag="v${version}"
+            else
+              if ! [[ "${latest_tag}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+                echo "Latest tag ${latest_tag} is not a stable SemVer tag." >&2
+                exit 1
+              fi
+              major="${BASH_REMATCH[1]}"
+              minor="${BASH_REMATCH[2]}"
+              patch="${BASH_REMATCH[3]}"
+              messages="$(git log --format=%B "${latest_tag}..${GITHUB_SHA}")"
+
+              if grep -Eiq 'BREAKING CHANGE:|^[[:alnum:]_-]+(\([^)]*\))?!:' <<< "${messages}"; then
+                major=$((major + 1))
+                minor=0
+                patch=0
+              elif grep -Eiq '^feat(\([^)]*\))?:' <<< "${messages}"; then
+                minor=$((minor + 1))
+                patch=0
+              else
+                patch=$((patch + 1))
+              fi
+              release_tag="v${major}.${minor}.${patch}"
+            fi
+
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              --field "ref=refs/tags/${release_tag}" \
+              --field "sha=${GITHUB_SHA}"
+          fi
+
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Start the tagged build and deployment pipeline
+        if: steps.version.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run deploy-vps.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "${RELEASE_TAG}" \
+            -f deploy_production=true
+          echo "Created ${RELEASE_TAG}; started the tagged build/package/deploy workflow."
