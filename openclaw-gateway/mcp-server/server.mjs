@@ -84,8 +84,7 @@ export function createToolDefinitions({ readScope = "openclaw.read", writeScope 
       }, ["path", "content"]),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       _meta: writeSecurity
-    }
-,
+    },
     {
       name: "workspace_sync",
       title: "Sync OpenClaw workspace to Obsidian now",
@@ -93,7 +92,8 @@ export function createToolDefinitions({ readScope = "openclaw.read", writeScope 
       inputSchema: jsonSchema("object"),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       _meta: writeSecurity
-    }  ];
+    }
+  ];
 }
 
 export function createMcpHttpServer({
