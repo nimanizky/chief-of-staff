@@ -10,8 +10,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY bootstrap.mjs docker-entrypoint.sh openclaw.example.json ./
-RUN mkdir -p /home/node/.openclaw && chown -R node:node /home/node/.openclaw
+COPY bootstrap.mjs migrate-workspace.mjs docker-entrypoint.sh openclaw.example.json ./
+RUN mkdir -p /home/node/.openclaw /workspace \
+    && chown -R node:node /home/node/.openclaw /workspace
 USER node
 ENV OPENCLAW_STATE_DIR=/home/node/.openclaw
 CMD ["sh", "/app/docker-entrypoint.sh"]
