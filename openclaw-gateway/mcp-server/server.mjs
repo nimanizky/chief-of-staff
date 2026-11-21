@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOpenClawAdapter } from "./openclaw.mjs";
 import { createWorkspaceAdapter } from "./workspace.mjs";
+import { createSyncAdapter } from "./sync.mjs";
 import { createAuthChallenge, createJwtVerifier, OAuthError } from "./auth.mjs";
 
 const SUPPORTED_PROTOCOLS = new Set(["2025-03-26", "2025-06-18", "2025-11-25"]);
@@ -84,13 +85,22 @@ export function createToolDefinitions({ readScope = "openclaw.read", writeScope 
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       _meta: writeSecurity
     }
-  ];
+,
+    {
+      name: "workspace_sync",
+      title: "Sync OpenClaw workspace to Obsidian now",
+      description: "Dispatch the existing GitHub Actions workflow to sync the persistent OpenClaw workspace with the private Obsidian vault. This queues a sync and returns immediately; check GitHub Actions for the final result. Call only when the user explicitly asks to sync now. The background sync worker continues to run independently.",
+      inputSchema: jsonSchema("object"),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      _meta: writeSecurity
+    }  ];
 }
 
 export function createMcpHttpServer({
   config = process.env,
   gateway = createOpenClawAdapter(),
   workspace = createWorkspaceAdapter(),
+  sync = null,
   verifyToken = createJwtVerifier({
     issuer: config.MCP_OAUTH_ISSUER,
     jwksUrl: config.MCP_OAUTH_JWKS_URL,
@@ -103,6 +113,12 @@ export function createMcpHttpServer({
   const writeScope = config.MCP_OAUTH_SCOPE_WRITE || "openclaw.write";
   const tools = createToolDefinitions({ readScope, writeScope });
   const toolByName = new Map(tools.map((tool) => [tool.name, tool]));
+  const syncAdapter = sync || createSyncAdapter({
+    token: config.MCP_SYNC_GITHUB_TOKEN,
+    repository: config.MCP_SYNC_GITHUB_REPOSITORY,
+    workflow: config.MCP_SYNC_GITHUB_WORKFLOW,
+    ref: config.MCP_SYNC_GITHUB_REF
+  });
 
   return createServer((request, response) => {
     void handleRequest(request, response).catch((error) => {
@@ -209,7 +225,7 @@ export function createMcpHttpServer({
           protocolVersion: requested || "2025-03-26",
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "chief-of-staff-openclaw", version: "1.0.0" },
-          instructions: "Use WhatsApp tools to read OpenClaw group session transcripts and send approved messages. Use workspace tools to read and save Markdown notes in the persistent Obsidian-synced workspace. Message history is limited to what OpenClaw retained in its session transcript."
+          instructions: "Use WhatsApp tools to read OpenClaw group session transcripts and send approved messages. Use workspace tools to read and save Markdown notes in the persistent Obsidian-synced workspace. Call workspace_sync only when the user explicitly asks to sync now; it dispatches the same GitHub Actions workflow available for manual runs. Message history is limited to what OpenClaw retained in its session transcript."
         };
       }
       case "notifications/initialized":
@@ -299,6 +315,9 @@ export function createMcpHttpServer({
             content: requiredString(args.content, "content", MAX_NOTE_BYTES, true),
             overwrite: args.overwrite === true
           });
+          break;
+        case "workspace_sync":
+          result = await syncAdapter.triggerSync();
           break;
         default:
           return toolError(`Tool handler is not implemented: ${name}`);
