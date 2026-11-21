@@ -7,7 +7,8 @@ const configPath = join(stateDir, "openclaw.json");
 const workspaceDir = process.env.OPENCLAW_WORKSPACE_DIR || "/workspace";
 const legacyWorkspacePaths = new Set([
   "~/.openclaw/workspace",
-  "/home/node/.openclaw/workspace"
+  "/home/node/.openclaw/workspace",
+  "/workspace"
 ]);
 
 await mkdir(stateDir, { recursive: true });
