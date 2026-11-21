@@ -55,6 +55,10 @@ try {
   const gitignore = await readFile(join(remote, ".gitignore"), "utf8");
   assert.match(gitignore, /\.env/);
   assert.match(gitignore, /\.openclaw-workspace-volume\.json/);
+  assert.match(gitignore, /secrets\//);
+  assert.match(gitignore, /\.ssh\//);
+  assert.match(gitignore, /\*\.crt/);
+  assert.match(gitignore, /\*\.log/);
 
   console.log("Memory sync tests passed.");
 } finally {
