@@ -16,6 +16,7 @@ const markerPath = join(stateDir, ".workspace-migration-v1.json");
 const sentinelPath = join(workspaceDir, ".openclaw-workspace-volume.json");
 const legacyWorkspaceDir = join(stateDir, "workspace");
 const allowEmpty = process.env.OPENCLAW_ALLOW_EMPTY_LEGACY_WORKSPACE === "true";
+let skippedCount = 0;
 
 const existingMarker = await readJsonIfExists(markerPath);
 if (existingMarker) {
@@ -43,6 +44,7 @@ if (!sourceStat || !sourceStat.isDirectory()) {
   }
   await completeMigration({
     fileCount: 0,
+    copiedCount: 0,
     skippedCount: 0,
     manifestHash: createHash("sha256").update("").digest("hex"),
     status: "empty-new-install"
@@ -64,7 +66,6 @@ for (const [path, targetHash] of targetFiles) {
 }
 
 let copiedCount = 0;
-let skippedCount = 0;
 
 for (const [path, sourceHash] of sourceFiles) {
   const sourcePath = join(legacyWorkspaceDir, path);
@@ -153,6 +154,7 @@ async function collectFiles(root, { includeExcluded }) {
     for (const entry of entries) {
       const rel = prefix ? join(prefix, entry.name) : entry.name;
       if (rel === "lost+found" || rel.startsWith(`lost+found${sep}`)) continue;
+      if (rel === ".openclaw-workspace-volume.json") continue;
       if (!includeExcluded && isExcluded(rel)) {
         skippedCount += 1;
         continue;
@@ -211,13 +213,13 @@ async function readJsonIfExists(path) {
   }
 }
 
-async function completeMigration({ fileCount, copiedCount = 0, skippedCount = 0, manifestHash, status }) {
+async function completeMigration({ fileCount, copiedCount, skippedCount, manifestHash, status }) {
   const existingSentinel = await readJsonIfExists(sentinelPath);
   const volumeId = existingSentinel?.volumeId || randomUUID();
   await writeJsonAtomic(sentinelPath, {
     version: 1,
     volumeId,
-    createdAt: new Date().toISOString()
+    createdAt: existingSentinel?.createdAt || new Date().toISOString()
   });
   await writeJsonAtomic(markerPath, {
     version: 1,

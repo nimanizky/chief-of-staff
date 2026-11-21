@@ -33,9 +33,10 @@ try {
 
 const defaults = config.agents?.defaults ?? {};
 const configuredWorkspace = defaults.workspace;
-const mainAgentWorkspace = Array.isArray(config.agents?.list)
-  ? config.agents.list.find((agent) => agent?.id === "main")?.workspace
+const mainAgent = Array.isArray(config.agents?.list)
+  ? config.agents.list.find((agent) => agent?.id === "main")
   : undefined;
+const mainAgentWorkspace = mainAgent?.workspace;
 
 for (const [label, value] of [
   ["agents.defaults.workspace", configuredWorkspace],
@@ -48,20 +49,25 @@ for (const [label, value] of [
   }
 }
 
-const workspaceChanged = configuredWorkspace !== workspaceDir;
-if (workspaceChanged) {
+const defaultsWorkspaceChanged = configuredWorkspace !== workspaceDir;
+const mainWorkspaceChanged = Boolean(mainAgentWorkspace && mainAgentWorkspace !== workspaceDir);
+
+if (defaultsWorkspaceChanged) {
   config.agents ??= {};
   config.agents.defaults ??= {};
   config.agents.defaults.workspace = workspaceDir;
 }
+if (mainWorkspaceChanged) {
+  mainAgent.workspace = workspaceDir;
+}
 
-if (created || workspaceChanged) {
+if (created || defaultsWorkspaceChanged || mainWorkspaceChanged) {
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, created
     ? { flag: "wx", mode: 0o600 }
     : "utf8");
   console.log(
     created
       ? "Created initial OpenClaw config with persistent workspace."
-      : `Updated OpenClaw default workspace to ${workspaceDir}; preserved other config.`
+      : `Updated OpenClaw workspace to ${workspaceDir}; preserved other config.`
   );
 }
