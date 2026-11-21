@@ -25,9 +25,9 @@ export function patchWhatsApp(root) {
         hasActiveHandoff(params.policy.account.accountId, params.senderId) ?
         [...params.policy.dmAllowFrom, params.senderId] : params.policy.dmAllowFrom),
         groupAllowFrom:`);
-  const toolsSource = replaceExactly(readFileSync(tools, 'utf8'), 'registerWhatsAppCallTool(api);\n\tregisterWhatsAppLoginTool(api);', 'registerWhatsAppCallTool(api);\n\tregisterWhatsAppLoginTool(api);\n\tregisterHandoffTool(api, Type);');
+  const toolsSource = replaceExactly(readFileSync(tools, 'utf8'), 'registerWhatsAppCallTool(api);\n\tregisterWhatsAppLoginTool(api);', 'registerWhatsAppCallTool(api);\n\tregisterWhatsAppLoginTool(api);\n\tregisterHandoffTool(api, Type, sendMessageWhatsApp);');
   writeFileSync(monitor, 'import { rememberIntroducedPeer, hasActiveHandoff } from "/app/whatsapp-handoff.mjs";\n' + monitorSource);
-  writeFileSync(tools, 'import { registerHandoffTool } from "/app/whatsapp-handoff.mjs";\n' + toolsSource);
+  writeFileSync(tools, 'import { registerHandoffTool } from "/app/whatsapp-handoff.mjs";\nimport { sendMessageWhatsApp } from "./runtime-api.js";\n' + toolsSource);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

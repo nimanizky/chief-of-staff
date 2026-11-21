@@ -51,6 +51,18 @@ test('live contact stays silent until verified owner takes over; can revoke', as
     assert.match(hooks.before_prompt_build({}, { channel: 'whatsapp', senderId: peer }).prependSystemContext, /Ask for a table/);
     await tool.execute('test', { number: peer, action: 'stop' });
     assert.equal(hasActiveHandoff('default', peer), false);
+    const sent = [];
+    registerHandoffTool({ registerTool: fn => { factory = fn; }, on: () => {} }, Type, async (...args) => { sent.push(args); });
+    const startNew = factory(ctx);
+    const newPeer = '+12025550125';
+    await startNew.execute('test', { number: newPeer, action: 'initiate', goal: 'Reserve a table', message: 'Is a table available?' });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0][0], newPeer);
+    assert.equal(hasActiveHandoff('default', newPeer), true);
+    assert.equal(hasActiveHandoff('default', '+12025550126'), false);
+    registerHandoffTool({ registerTool: fn => { factory = fn; }, on: () => {} }, Type, async () => { throw new Error('send failed'); });
+    await assert.rejects(factory(ctx).execute('test', { number: '+12025550127', action: 'initiate', goal: 'Ask', message: 'Hello' }), /send failed/);
+    assert.equal(hasActiveHandoff('default', '+12025550127'), false);
   } finally {
     for (const key of ['OPENCLAW_STATE_DIR', 'WHATSAPP_HANDOFF_ENABLED', 'WHATSAPP_HANDOFF_OWNER']) delete process.env[key];
     rmSync(root, { recursive: true, force: true });
