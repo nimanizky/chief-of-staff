@@ -115,7 +115,19 @@ browser login, or cutover from the legacy gateway.
 
 The gateway can optionally expose a remote, Streamable HTTP MCP server for ChatGPT and other MCP clients. It runs in the same container as the Gateway so it can call the local OpenClaw CLI and access the same persistent /workspace volume without copying WhatsApp credentials or Gateway state into another container.
 
-The endpoint is **disabled by default**. When enabled, the supervisor waits for the Gateway health check before starting the MCP listener. The MCP listener is not published as a host port by Compose; route it through a trusted HTTPS reverse proxy or tunnel on the existing chief-of-staff-services Docker network. Do not expose the OpenClaw Gateway port (18789) to ChatGPT.
+The endpoint is **disabled by default** and runs as a second process inside the existing `gateway` container. It is not a separate Docker service or container. When enabled, the supervisor waits for the Gateway health check before starting the MCP listener.
+
+Compose binds the MCP listener to `0.0.0.0:3200` inside the container, exposes port 3200 on the private Docker network, and publishes it on the VPS host as `127.0.0.1:${MCP_HOST_PORT:-3200}` only. This lets a reverse proxy running on the VPS host reach MCP without making port 3200 directly accessible from the internet. A reverse-proxy container attached to `chief-of-staff-services` can instead route to `http://gateway:3200`.
+
+To let ChatGPT reach it from outside the VPS, configure a stable public HTTPS hostname and route it through an existing host-level reverse proxy (for example Caddy or Nginx) to `http://127.0.0.1:3200`, or use a secure tunnel such as Cloudflare Tunnel with that same local upstream. For example, a host-level Caddy site can use:
+
+~~~caddyfile
+mcp.example.com {
+    reverse_proxy 127.0.0.1:3200
+}
+~~~
+
+Replace `mcp.example.com` with a domain whose DNS points to the VPS (or is routed through the tunnel). The proxy must forward both `/mcp` and `/.well-known/oauth-protected-resource` without rewriting their paths or dropping the `Authorization` header, and terminate valid public TLS. ChatGPT connects to `https://mcp.example.com/mcp`. Do not publish port 3200 or the OpenClaw Gateway port (18789) directly to the public internet. The repository does not currently provision a public reverse proxy, DNS record, tunnel, or OAuth identity provider; those remain deployment configuration.
 
 ### Available tools
 
@@ -145,8 +157,8 @@ Configure the following values in the gateway .env file:
 
 ~~~dotenv
 MCP_SERVER_ENABLED=true
-MCP_BIND_HOST=0.0.0.0
 MCP_PORT=3200
+MCP_HOST_PORT=3200
 MCP_PUBLIC_URL=https://mcp.example.com
 MCP_OAUTH_ISSUER=https://your-identity-provider.example/
 MCP_OAUTH_JWKS_URL=https://your-identity-provider.example/.well-known/jwks.json
@@ -160,9 +172,18 @@ MCP_SYNC_GITHUB_WORKFLOW=openclaw-obsidian-manual-sync.yml
 MCP_SYNC_GITHUB_REF=main
 ~~~
 
-MCP_PUBLIC_URL is the public HTTPS **origin**, without /mcp. The reverse proxy must route both https://mcp.example.com/mcp and https://mcp.example.com/.well-known/oauth-protected-resource to http://gateway:3200 on the private Docker network. The audience/resource value issued by the identity provider must exactly match MCP_PUBLIC_URL. MCP_OAUTH_ISSUER must exactly match the token's iss claim, including any trailing slash. MCP_OAUTH_ALLOWED_SUBJECT is required and restricts this personal server to one stable identity-provider subject. Tokens are checked for signature, issuer, audience, expiry, not-before, and required scopes on every tool call. Supported JWT signature algorithms are RS256, PS256, and ES256.
+MCP_PUBLIC_URL is the public HTTPS **origin**, without /mcp. A host-level reverse proxy routes both https://mcp.example.com/mcp and https://mcp.example.com/.well-known/oauth-protected-resource to http://127.0.0.1:3200. A reverse-proxy container on the private Docker network can instead use http://gateway:3200. Preserve request paths and the Authorization header. The audience/resource value issued by the identity provider must exactly match MCP_PUBLIC_URL. MCP_OAUTH_ISSUER must exactly match the token's iss claim, including any trailing slash. MCP_OAUTH_ALLOWED_SUBJECT is required and restricts this personal server to one stable identity-provider subject. Tokens are checked for signature, issuer, audience, expiry, not-before, and required scopes on every tool call. Supported JWT signature algorithms are RS256, PS256, and ES256.
 
-Keep MCP_BIND_HOST=127.0.0.1 if only local access is needed. Set it to 0.0.0.0 only when a reverse proxy on the same private Docker network needs to reach the service. Compose does not publish port 3200 on the host. Keep the reverse proxy and OAuth provider configuration private and do not replace OAuth with a static bearer token.
+Compose sets MCP_BIND_HOST=0.0.0.0 inside the container so trusted Docker peers and the host-loopback port mapping can reach it. The published host port is restricted to 127.0.0.1; it is not directly reachable from the internet. Set MCP_HOST_PORT only if 3200 is already occupied on the VPS. Do not expose port 3200 or the OpenClaw Gateway RPC port (18789) publicly. Keep the reverse proxy and OAuth provider configuration private and do not replace OAuth with a static bearer token.
+
+After enabling MCP and configuring OAuth in the VPS .env, redeploy the gateway. Verify locally on the VPS before connecting ChatGPT:
+
+~~~bash
+curl -fsS http://127.0.0.1:3200/healthz
+curl -fsS https://mcp.example.com/.well-known/oauth-protected-resource
+~~~
+
+The first request checks the local MCP process; the second checks public HTTPS routing and protected-resource metadata. A successful health check does not mean OAuth is configured or that ChatGPT has authenticated.
 
 After configuring the provider and reverse proxy, connect ChatGPT to:
 
