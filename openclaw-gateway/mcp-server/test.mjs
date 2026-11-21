@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createMcpHttpServer } from "./server.mjs";
 import { createOpenClawAdapter, parseWhatsAppGroupSession } from "./openclaw.mjs";
 import { createWorkspaceAdapter } from "./workspace.mjs";
+import { createSyncAdapter } from "./sync.mjs";
 import { createJwtVerifier } from "./auth.mjs";
 import { generateKeyPairSync, sign } from "node:crypto";
 
@@ -48,6 +49,23 @@ const sent = await adapter.sendWhatsAppGroupMessage({ groupJid, message: "Test m
 assert.equal(sent.sent, true);
 assert.ok(cliCalls.at(-1).includes("--target"));
 assert.ok(cliCalls.at(-1).includes(groupJid));
+
+let dispatchRequest;
+const syncAdapter = createSyncAdapter({
+  token: "test-github-token",
+  repository: "nimanizky/chief-of-staff",
+  workflow: "openclaw-obsidian-manual-sync.yml",
+  ref: "main",
+  fetchImpl: async (url, options) => {
+    dispatchRequest = { url, options };
+    return { status: 204, text: async () => "" };
+  }
+});
+const dispatchResult = await syncAdapter.triggerSync();
+assert.equal(dispatchResult.status, "queued");
+assert.equal(dispatchRequest.url, "https://api.github.com/repos/nimanizky/chief-of-staff/actions/workflows/openclaw-obsidian-manual-sync.yml/dispatches");
+assert.equal(dispatchRequest.options.headers.Authorization, "Bearer test-github-token");
+assert.deepEqual(JSON.parse(dispatchRequest.options.body), { ref: "main", inputs: { confirm_sync: true } });
 
 const tempRoot = await mkdtemp(join(tmpdir(), "openclaw-mcp-test-"));
 try {
@@ -105,6 +123,7 @@ const httpServer = createMcpHttpServer({
   },
   gateway: { listWhatsAppGroups: async () => [{ group_jid: groupJid }] },
   workspace: { listNotes: async () => ({ notes: [], count: 0, limit: 10 }) },
+  sync: { triggerSync: async () => ({ status: "queued", trigger: "github_actions" }) },
   verifyToken: async (value, scopes) => {
     if (value !== "good-token" && value !== "wrong-user-token") throw new Error("bad token");
     return { subject: value === "good-token" ? "user-1" : "user-2", scopes: new Set(scopes) };
@@ -128,7 +147,7 @@ try {
     body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} })
   });
   const listBody = await listed.json();
-  assert.equal(listBody.result.tools.length, 6);
+  assert.equal(listBody.result.tools.length, 7);
   assert.equal(listBody.result.tools.find((tool) => tool.name === "whatsapp_send_group_message")._meta.securitySchemes[0].type, "oauth2");
 
   const unauthorized = await fetch(`${base}/mcp`, {
@@ -156,6 +175,15 @@ try {
   });
   const authorizedBody = await authorized.json();
   assert.equal(authorizedBody.result.structuredContent.groups[0].group_jid, groupJid);
+
+  const syncCall = await fetch(`${base}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json", authorization: "Bearer good-token" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "workspace_sync", arguments: {} } })
+  });
+  const syncBody = await syncCall.json();
+  assert.equal(syncBody.result.structuredContent.status, "queued");
+  assert.equal(syncBody.result.structuredContent.trigger, "github_actions");
 
   const notificationCall = await fetch(`${base}/mcp`, {
     method: "POST",
