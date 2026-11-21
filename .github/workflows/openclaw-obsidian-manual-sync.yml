@@ -1,0 +1,57 @@
+name: OpenClaw to Obsidian manual sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_sync:
+        description: "Confirm syncing the persistent OpenClaw workspace with the private Obsidian vault."
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_sync
+    name: Sync OpenClaw workspace to Obsidian
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    concurrency:
+      group: openclaw-gateway-production
+      cancel-in-progress: false
+    steps:
+      - name: Configure VPS SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$VPS_HOST"
+          test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+      - name: Run sync on the OpenClaw server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -eu
+          port="${VPS_PORT:-22}"
+          user="${VPS_USER:-root}"
+          ssh -i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -p "$port" "$user@$VPS_HOST" <<'REMOTE'
+          set -eu
+          cd /opt/chief-of-staff/openclaw-gateway
+          test -s .env
+          test -s ../secrets/obsidian-vault-deploy-key
+          docker compose exec -T memory-sync node /app/sync.mjs sync
+          REMOTE

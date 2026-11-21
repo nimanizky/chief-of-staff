@@ -49,6 +49,26 @@ persistent memory and the background worker retries.
 The worker uses Git over SSH and pins GitHub's published Ed25519 host key. It
 never force-pushes or resets the workspace.
 
+### Manual sync from GitHub Actions
+
+After the workflow is merged into `main`, open **Actions → OpenClaw to Obsidian
+manual sync**, select `main`, confirm the checkbox, and select **Run workflow**.
+The workflow connects to the VPS and asks the already-running `memory-sync`
+container to run the same `sync.mjs sync` command. It does not upload or
+download workspace files through GitHub Actions.
+
+ChatGPT can trigger that exact same workflow through the MCP
+`workspace_sync` tool. In other words, the GitHub button and the ChatGPT tool
+are two entry points to one server-side sync operation. The automatic worker
+continues to poll at `MEMORY_SYNC_INTERVAL_SECONDS` (60 seconds by default);
+manual requests do not disable it. A lock in the sync engine prevents the
+background worker and an on-demand request from running Git operations at the
+same time.
+
+The current GitHub workflow is manual-only. A GitHub Actions `schedule` trigger
+can be added to this same workflow later if a calendar-based cadence is wanted;
+it will reuse the same VPS command and sync engine.
+
 ### One-time GitHub setup
 
 1. Generate a dedicated Ed25519 key pair:

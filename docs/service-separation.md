@@ -57,6 +57,16 @@ Browserless sessions may be ephemeral; persistent login is not yet validated.
 
 `.github/workflows/openclaw-gateway.yml` and `finance-service.yml` run separately
 on relevant PRs and main changes. Each runs its own checks and builds its image.
+
+The OpenClaw-to-Obsidian manual workflow is a second entry point to the same
+server-side sync engine. A confirmed `workflow_dispatch` run connects to the
+VPS and executes `docker compose exec -T memory-sync node /app/sync.mjs sync`
+inside the already-running worker container. The ChatGPT MCP
+`workspace_sync` tool dispatches this same workflow; it does not implement a
+separate Git sync path. The background worker remains enabled and polls at the
+configured interval. The sync engine uses a workspace lock to prevent overlap.
+The workflow can gain a `schedule` trigger later without changing the sync
+implementation.
 Deployment can be manually dispatched from `main`; push-to-main deployment is
 disabled unless the corresponding repository variable `ENABLE_OPENCLAW_AUTO_DEPLOY`
 or `ENABLE_FINANCE_AUTO_DEPLOY` is set to `true`. Configure required reviewers
