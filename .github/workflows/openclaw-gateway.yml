@@ -27,6 +27,8 @@ jobs:
       - run: npm test
       - run: npx --no-install openclaw --version
       - run: docker build -t chief-openclaw:ci .
+      - run: docker build -t chief-openclaw-memory-sync:ci ./memory-sync
+      - run: cp .env.example .env && docker compose config >/dev/null && rm .env
 
   deploy:
     if: >-
@@ -49,6 +51,24 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+      - name: Install Obsidian vault deploy key (optional until configured)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          OBSIDIAN_VAULT_DEPLOY_KEY: ${{ secrets.OBSIDIAN_VAULT_DEPLOY_KEY }}
+        run: |
+          set -eu
+          port="${VPS_PORT:-22}"
+          user="${VPS_USER:-root}"
+          ssh_cmd="ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p $port"
+          $ssh_cmd "$user@$VPS_HOST" 'mkdir -p /opt/chief-of-staff/secrets && chmod 755 /opt/chief-of-staff/secrets'
+          if [ -z "$OBSIDIAN_VAULT_DEPLOY_KEY" ]; then
+            echo "OBSIDIAN_VAULT_DEPLOY_KEY is not configured; the memory-sync worker will remain local-only."
+            exit 0
+          fi
+          printf '%s\n' "$OBSIDIAN_VAULT_DEPLOY_KEY" | $ssh_cmd "$user@$VPS_HOST" 'umask 077; cat > /opt/chief-of-staff/secrets/obsidian-vault-deploy-key'
+          $ssh_cmd "$user@$VPS_HOST" 'chown 1000:1000 /opt/chief-of-staff/secrets/obsidian-vault-deploy-key && chmod 600 /opt/chief-of-staff/secrets/obsidian-vault-deploy-key'
       - name: Deploy gateway
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -59,6 +79,6 @@ jobs:
           port="${VPS_PORT:-22}"
           user="${VPS_USER:-root}"
           ssh_cmd="ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p $port"
-          $ssh_cmd "$user@$VPS_HOST" 'mkdir -p /opt/chief-of-staff/openclaw-gateway'
+          $ssh_cmd "$user@$VPS_HOST" 'mkdir -p /opt/chief-of-staff/openclaw-gateway /opt/chief-of-staff/secrets'
           rsync -az --delete --exclude='/.env' --exclude='/.openclaw/' --exclude='/node_modules/' -e "$ssh_cmd" openclaw-gateway/ "$user@$VPS_HOST:/opt/chief-of-staff/openclaw-gateway/"
           $ssh_cmd "$user@$VPS_HOST" 'set -eu; cd /opt/chief-of-staff/openclaw-gateway; test -s .env; docker network inspect chief-of-staff-services >/dev/null 2>&1 || docker network create chief-of-staff-services >/dev/null; docker compose up -d --build'

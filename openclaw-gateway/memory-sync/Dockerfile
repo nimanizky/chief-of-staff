@@ -11,4 +11,4 @@ RUN mkdir -p /workspace /tmp/home \
 
 USER node
 ENV HOME=/tmp/home
-ENTRYPOINT ["node", "/app/sync.mjs"]
+CMD ["node", "/app/sync.mjs"]
