@@ -22,6 +22,8 @@ try {
   await writeFile(join(legacyDir, ".env"), "DO_NOT_COPY=true\n");
   await writeFile(join(legacyDir, "auth.json"), "{\"token\":\"do-not-copy\"}\n");
   await writeFile(join(legacyDir, "agent.sqlite"), "not a real database");
+  await mkdir(join(legacyDir, "secrets"), { recursive: true });
+  await writeFile(join(legacyDir, "secrets", "api-token.txt"), "never copy this");
   await mkdir(join(legacyDir, "node_modules", "sample"), { recursive: true });
   await writeFile(join(legacyDir, "node_modules", "sample", "index.js"), "secret");
   await symlink(join(legacyDir, "MEMORY.md"), join(legacyDir, "memory-link.md"));
@@ -44,6 +46,7 @@ try {
   await assert.rejects(readFile(join(workspaceDir, ".env"), "utf8"));
   await assert.rejects(readFile(join(workspaceDir, "auth.json"), "utf8"));
   await assert.rejects(readFile(join(workspaceDir, "agent.sqlite"), "utf8"));
+  await assert.rejects(readFile(join(workspaceDir, "secrets", "api-token.txt"), "utf8"));
   await assert.rejects(readFile(join(workspaceDir, "node_modules", "sample", "index.js"), "utf8"));
   await assert.rejects(readFile(join(workspaceDir, "memory-link.md"), "utf8"));
 

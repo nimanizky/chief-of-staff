@@ -184,7 +184,7 @@ async function collectFiles(root, { includeExcluded }) {
 function isExcluded(path) {
   const parts = path.split(sep);
   const name = parts.at(-1).toLowerCase();
-  if (parts.some((part) => [".git", ".openclaw", "node_modules", ".cache"].includes(part))) return true;
+  if (parts.some((part) => [".git", ".openclaw", ".ssh", "secrets", "node_modules", ".cache"].includes(part))) return true;
   if (name === ".env" || name.startsWith(".env.")) return true;
   if (["auth.json", "credentials.json", "id_rsa", "id_ed25519"].includes(name)) return true;
   return /\.(sqlite3?|db|pem|key|p12|pfx)$/i.test(name);
