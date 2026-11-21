@@ -1,7 +1,27 @@
 # WhatsApp conversation policy: implementation design
 
-Status: design only. This document does not enable the feature or change the
-running gateway. Do not claim an approval guarantee until all paths are tested.
+## Available in this PR: explicit admin send
+
+After rebuilding the gateway image, run from the Compose directory:
+
+```sh
+docker compose exec -T gateway node /app/whatsapp-introduce.mjs < /path/to/private-message.json
+```
+
+The private file contains a JSON object with `number` (international format)
+and `message` (text). Keep it outside git with restricted permissions. Run
+only from an authorized admin shell. Keep an explicit WhatsApp DM allowlist
+without wildcards, and set a separate group sender policy. Existing numbers
+are preserved. The recipient is added after the send command succeeds, so an
+immediate reply can arrive before the allowlist update completes. Do not run
+concurrently with another introduction or allowlist edit. If the update fails,
+check delivery and repair the allowlist without resending blindly.
+
+This does not monitor messages sent from the WhatsApp app or by agents, and
+does not implement per-message approval. Unit tests use a fake CLI; verify
+against a test WhatsApp account before rolling out.
+
+## Future design (not implemented)
 
 ## Goal
 
