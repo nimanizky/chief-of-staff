@@ -1,4 +1,12 @@
 FROM node:24-bookworm-slim
+
+# The slim base image may not include the system CA bundle. Codex app-server
+# needs it to validate TLS connections to ChatGPT/OpenAI endpoints.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
