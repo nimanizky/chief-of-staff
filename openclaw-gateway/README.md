@@ -134,7 +134,7 @@ Workspace tools operate only on Markdown files under /workspace. They reject abs
 
 ### OAuth and public endpoint setup
 
-The MCP server is a **resource server**, not an OAuth authorization server. Use an established OAuth 2.1 identity provider. The provider must support the MCP authorization-code flow with PKCE S256, refresh tokens, ChatGPT's Client ID Metadata Documents (CIMD) or Dynamic Client Registration (DCR), and the resource parameter. It must issue JWT access tokens with a signing key published through JWKS and an audience/resource claim matching this MCP server.
+The MCP server is a **resource server**, not an OAuth authorization server. Use an established OAuth 2.1 identity provider. The provider must support the MCP authorization-code flow with PKCE S256, refresh tokens, ChatGPT's Client ID Metadata Documents (CIMD) or Dynamic Client Registration (DCR), and the resource parameter. Its authorization-server metadata must advertise S256, the supported token-endpoint authentication methods, and either CIMD support or a registration endpoint. It should set authorization_response_iss_parameter_supported=true and return the exact issuer in the iss parameter on successful and error authorization responses. The provider must issue JWT access tokens with a signing key published through JWKS and an audience/resource claim matching this MCP server.
 
 Configure the following values in the gateway .env file:
 
