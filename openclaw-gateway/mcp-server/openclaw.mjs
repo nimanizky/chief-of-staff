@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 
 const GROUP_MARKER = ":whatsapp:group:";
-const GROUP_JID_PATTERN = /^\d{5,}-\d{5,}@g\.us$/;
+const GROUP_JID_PATTERN = /^\d{5,}(?:-\d{5,})?@g\.us$/;
 
 export function parseWhatsAppGroupSession(row) {
   if (!row || typeof row.key !== "string") return null;
