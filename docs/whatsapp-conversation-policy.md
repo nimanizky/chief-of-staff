@@ -1,85 +1,43 @@
-# WhatsApp conversation policy: implementation design
+# WhatsApp conversation handoff
 
-## Available in this PR: explicit admin send
+Experimental and off by default. Validate on a dedicated test account first.
 
-After rebuilding the gateway image, run from the Compose directory:
+1. Send a normal WhatsApp DM from the linked phone while the gateway is online.
+   The gateway remembers the contact, but takes no action. Their reply is
+   visible in the WhatsApp app even if OpenClaw ignores it.
+2. In an owner-authenticated WhatsApp DM, say “Take over the conversation with
+   restaurant A; ask if a table at 7 pm for four is available.” Provide the
+   exact number if OpenClaw cannot resolve it. The model has a dedicated
+   handoff tool; the owner does not run a shell command for each conversation.
+3. New inbound messages from that contact are eligible for automatic text
+   replies during the one-hour handoff. Previously ignored messages are not
+   replayed. Ask OpenClaw to stop the handoff to revoke it early.
+4. Unknown DMs remain subject to the existing no-pairing allowlist. Keep it
+   tight and audit previous pairing grants; groups are unchanged.
 
-```sh
-docker compose exec -T gateway node /app/whatsapp-introduce.mjs < /path/to/private-message.json
-```
+## Operator setup (one time)
 
-The private file contains a JSON object with `number` (international format)
-and `message` (text). Keep it outside git with restricted permissions. Run
-only from an authorized admin shell. Keep an explicit WhatsApp DM allowlist
-without wildcards, and set a separate group sender policy. Existing numbers
-are preserved. The recipient is added after the send command succeeds, so an
-immediate reply can arrive before the allowlist update completes. Do not run
-concurrently with another introduction or allowlist edit. If the update fails,
-check delivery and repair the allowlist without resending blindly.
+Use the pinned gateway image built by this PR and the default WhatsApp account.
+Keep WhatsApp's effective DM policy at `allowlist` without a wildcard. Enable
+`WHATSAPP_HANDOFF_ENABLED=1` and configure `WHATSAPP_HANDOFF_OWNER` privately
+in the gateway env. The number must also resolve as owner in OpenClaw, not merely
+an allowed sender. Configure `session.dmScope` as `per-channel-peer` or
+`per-account-channel-peer`. State is stored under the existing state volume.
 
-This does not monitor messages sent from the WhatsApp app or by agents, and
-does not implement per-message approval. Unit tests use a fake CLI; verify
-against a test WhatsApp account before rolling out.
+## Limits and validation
 
-## Future design (not implemented)
-
-## Goal
-
-An authenticated owner can initiate a WhatsApp conversation in either mode:
-
-- `automatic`: the agent may reply within the task's authorized scope.
-- `approval`: inbound messages become pending owner decisions; no reply is sent
-  to the external recipient without explicit approval of that exact message.
-
-Unknown senders are ignored, without pairing messages. Phone numbers and message
-content belong in private persistent state, never in source code or test fixtures.
-WhatsApp groups retain independent policy.
-
-## Trust boundary
-
-This is not achieved by a system prompt or by setting `dmPolicy` alone. The
-owner identity must be authenticated by the gateway, not inferred from text in
-a message. Restaurant messages and attachments are untrusted. No payment,
-sharing secrets, irreversible action, or change to task scope is authorized by
-the automatic mode itself.
-
-An integration must gate all applicable inbound, agent reply, outbound message,
-scheduled and tool paths; it must fail closed on missing or invalid state. Verify
-the installed OpenClaw version's hook coverage and ordering before selecting an
-integration. Native allowlist and prior pairing records can both affect inbound
-access and must be audited, not assumed empty.
-
-## Proposed lifecycle
-
-1. Owner authorizes recipient, mode, task scope and expiry; registration and
-   outbound delivery are coordinated so failures never silently grant access.
-2. Persist conversation and delivery state durably with restricted permissions;
-   use stable recipient identifiers and isolate accounts. Avoid phone numbers in
-   logs, screenshots, GitHub variables, and repository files.
-3. For `approval`, store incoming events idempotently, notify only the verified
-   owner, and require an approval bound to a pending message and exact outgoing
-   text. Replays, changed content, stale approvals and concurrent attempts fail
-   closed. Give the owner a way to edit, reject, revoke and close a conversation.
-4. For `automatic`, enforce task limits and escalation for sensitive actions;
-   messages from the recipient cannot expand permissions.
-5. Persist state across restarts, support encrypted off-host backups and test
-   recovery, missed messages and duplicate delivery. Avoid claiming exactly-once
-   message delivery unless the transport actually provides it.
-
-## Verification required before rollout
-
-- Unknown recipient gets no bot response or pairing request.
-- Approved recipient can reply; automatic mode respects authorization limits.
-- Approval mode never sends to recipient before the real owner's approval,
-  including tool, scheduled, retry, restart and race-condition paths.
-- A different sender, forged approval, modified draft and replay cannot approve.
-- Failure of policy state, gateway connection or notification fails closed.
-- Closing/revoking survives restart; no phone numbers or secrets enter git/logs.
-- WhatsApp group behavior and existing owner access remain unchanged.
-
-## Deployment
-
-Implementation, native-version compatibility, server migration, monitoring and
-rollback are not yet complete. Do not deploy this design as if it implements
-the policy. Runtime configuration and personal identifiers must not be included
-in a pull request.
+- The observer accepts fresh, direct, same-account outgoing events and excludes
+  OpenClaw's recent outbound echoes plus Baileys-generated IDs. This is an
+  ID-format heuristic, not conclusive proof that a message came from a handset
+  rather than another linked client. Offline sends are not guaranteed.
+- Handoff replies use the existing agent and a tool-blocking hook, not a
+  separately sandboxed external agent. Goal instructions are prompt guidance,
+  not a hard authorization boundary. Do not enable on an agent with sensitive
+  context until the runtime's tool blocking and context isolation are verified.
+- Tests exercise persisted handoff state, owner gating, prompt and tool hooks,
+  and patch anchor/syntax checks against the pinned plugin. No live WhatsApp
+  test has been performed. Verify handset observation, owner-tool visibility,
+  a real auto-reply, no reply to an unknown sender, and expiry/revocation
+  before enabling on the primary number.
+- No per-message approval, proactive reply to a previous inbound message,
+  or automatic detection of task completion.
