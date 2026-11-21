@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Run offline tests
-        run: npm run test:finance && npm run validate-schema && npm run check-classification && npm run test:receipt-sqlite --if-present && npm run test:finance-api --if-present
+        run: npm run test:finance && npm run validate-schema && npm run check-classification && npm run test:receipt-sqlite --if-present && npm run test:finance-api --if-present && npm run test:general-whatsapp
 
   secret-scan:
     name: Scan pull request for leaked secrets

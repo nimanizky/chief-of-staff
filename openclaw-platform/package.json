@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:cicilan && npm run test:receipt-pdf && npm run test:wishlist && npm run test:finance && npm run test:wealth && npm run test:budget && npm run test:finance-api",
+    "test": "npm run test:cicilan && npm run test:receipt-pdf && npm run test:wishlist && npm run test:finance && npm run test:wealth && npm run test:budget && npm run test:finance-api && npm run test:general-whatsapp",
     "build": "tsc -p tsconfig.json",
     "validate-schema": "tsx src/scripts/validate_receipt_schema.ts",
     "check-classification": "tsx src/scripts/check_receipt_classification.ts",
@@ -22,6 +22,7 @@
     "finance:sheets-sync:once": "tsx src/scripts/sync_receipt_sheets.ts --once",
     "finance:sheets-sync": "node dist/scripts/sync_receipt_sheets.js",
     "test:budget": "tsx src/scripts/test_budget_guardrail.ts",
+    "test:general-whatsapp": "node --import tsx src/scripts/test_general_whatsapp.mjs",
     "budget:send": "node dist/scripts/send_budget_guardrail.js"
   },
   "dependencies": {
@@ -35,7 +36,7 @@
     "googleapis": "^144.0.0",
     "grammy": "^1.42.0",
     "openai": "^4.104.0",
-    "openclaw": "2026.10.4",
+    "openclaw": "2026.11.6",
     "zod": "^3.24.1"
   },
   "devDependencies": {

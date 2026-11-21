@@ -20,6 +20,11 @@ const handler = async (event: any) => {
 
   const context = buildTaskRouterContext(event);
   logTaskRouterStart(context);
+  // General WhatsApp uses the standard OpenClaw agent instead of local task routing.
+  if (context.sourcePlatform === "whatsapp" && /^(1|true|yes|on)$/i.test(process.env.OPENCLAW_GENERAL_WHATSAPP ?? "")) {
+    logStep("routing.default_agent", { reason: "general_whatsapp_mode" });
+    return;
+  }
   const policy = resolveChannelPolicy(context);
   logStep("routing.policy", {
     key: policy.key,

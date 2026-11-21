@@ -1,8 +1,47 @@
 # openclaw-platform (M1 executable, OpenClaw-first)
 
+## General WhatsApp and browser mode
+
+Docker enables `OPENCLAW_GENERAL_WHATSAPP=true` by default. In this mode incoming
+WhatsApp messages are left to the normal OpenClaw agent instead of the custom
+task router and task-gate plugin. This includes media and wishlist commands;
+the existing WhatsApp wishlist workflow does not run in this mode. Telegram
+continues to use its existing task routing. Set `OPENCLAW_GENERAL_WHATSAPP=false`
+in the Compose environment to restore the previous WhatsApp routing.
+
+The gateway image includes Chromium and configures OpenClaw's managed browser
+to run headlessly. The browser profile is stored under `.openclaw-home`, which
+the gateway mounts persistently. The gateway container currently runs as root,
+so Chromium is launched with `--no-sandbox`; it shares the gateway's container
+and access to its mounted files. Treat browser sessions and credentials as
+sensitive, and do not expose the browser control endpoint publicly. A separate,
+less-privileged browser container is a future hardening step.
+
+This enables the browser tool; it does not by itself guarantee a search provider,
+website login, ChatGPT subscription access, or that an external website permits
+automation. A headless browser has no desktop login window; some sites require
+interactive sign-in or CAPTCHA/2FA. Authenticate using the supported OAuth flow
+or an appropriate browser host; do not paste credentials into chat.
+
+When running locally in Docker, after starting the gateway, inspect the browser:
+
+```bash
+docker compose exec gateway bash ./scripts/openclaw-local.sh browser status
+docker compose exec gateway bash ./scripts/openclaw-local.sh browser start
+docker compose exec gateway bash ./scripts/openclaw-local.sh browser open https://example.com
+docker compose exec gateway bash ./scripts/openclaw-local.sh browser snapshot
+```
+
+Browser commands require valid gateway authentication. The OpenClaw version is
+pinned in `package.json`; upgrades can migrate session state, so back up the
+mounted OpenClaw state and SQLite volume and test on staging before deployment.
+General WhatsApp mode does not create a finance service or connect its MCP tools
+to the agent: the existing Finance API remains optional and co-located with the
+gateway until that integration is implemented.
+
 Local implementation for RFC-001:
 - Telegram receipt intake (media-first flow; `/receipt` remains optional)
-- Mistral extraction (`mistral-small-latest`)
+- Receipt extraction using the provider and model selected in `config/providers.json`
 - `receipt.v1.1` validation
 - SQLite canonical storage with an asynchronous Google Sheets mirror to `receipts_raw`
 - `monthly_breakdown` formula bootstrap after each successful sheet sync
@@ -16,7 +55,7 @@ This project is set up to prefer a project-local OpenClaw binary.
 - `OPENCLAW_HOME` defaults to `openclaw-platform/.openclaw-home`
 - Global OpenClaw is only used if `OPENCLAW_ALLOW_GLOBAL=1` is set
 
-`openclaw` is pinned in this repo (`openclaw@2026.10.4`) and installed via `npm install`.
+`openclaw` is pinned in this repo (`openclaw@2026.11.6`) and installed via `npm install`.
 
 ## Step-by-step (Local Telegram end-to-end)
 

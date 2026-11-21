@@ -1,0 +1,11 @@
+{
+  "mcp": {
+    "servers": {
+      "finance": {
+        "url": "http://finance:3100/mcp",
+        "transport": "streamable-http",
+        "headers": { "Authorization": "Bearer ${FINANCE_MCP_TOKEN}" }
+      }
+    }
+  }
+}

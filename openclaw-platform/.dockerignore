@@ -6,4 +6,9 @@ dist
 obsidian-vault
 openclaw-obsidian-vault
 .openclaw-home
+.env
+.env.*
+!.env.example
+.secrets
+data
 *.log

@@ -136,12 +136,20 @@ function envBool(name, fallback) {
   return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
 }
 
+function isGeneralWhatsApp(event, ctx) {
+  return envBool("OPENCLAW_GENERAL_WHATSAPP", false) &&
+    [event?.channel, ctx?.channelId, ctx?.messageProvider].some(
+      (value) => String(value ?? "").toLowerCase() === "whatsapp"
+    );
+}
+
 export default definePluginEntry({
   id: "task-gate",
   name: "Task Gate",
   description: "Suppresses default model replies for deterministic task commands.",
   register(api) {
     api.on("before_dispatch", async (event, ctx) => {
+      if (isGeneralWhatsApp(event, ctx)) return;
       if (!envBool("WISHLIST_EXACT_DISPATCH", true)) return;
       if (event?.channel !== "whatsapp" && ctx?.channelId !== "whatsapp") return;
 
@@ -172,6 +180,7 @@ export default definePluginEntry({
     });
 
     api.on("before_prompt_build", (event, ctx) => {
+      if (isGeneralWhatsApp(event, ctx)) return;
       const syntheticReply = syntheticTaskReply(event);
       if (!syntheticReply) return;
 
@@ -188,6 +197,7 @@ export default definePluginEntry({
     });
 
     api.on("before_agent_reply", (event, ctx) => {
+      if (isGeneralWhatsApp(event, ctx)) return;
       const syntheticReply = syntheticTaskReply(event);
       if (syntheticReply) {
         api.logger.info("using deterministic task reply", {
