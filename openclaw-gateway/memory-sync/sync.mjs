@@ -19,6 +19,8 @@ import { promisify } from "node:util";
 const execFile = promisify(execFileCallback);
 const SAFE_GITIGNORE_RULES = [
   ".openclaw-workspace-volume.json",
+  ".ssh/",
+  "secrets/",
   ".env",
   ".env.*",
   "node_modules/",
@@ -29,6 +31,11 @@ const SAFE_GITIGNORE_RULES = [
   "*.key",
   "*.p12",
   "*.pfx",
+  "*.crt",
+  "*.cer",
+  "*.secret",
+  "*.token",
+  "*.log",
   "auth.json",
   "credentials.json",
   "id_rsa",
@@ -39,7 +46,7 @@ export function isIgnoredPath(path) {
   const normalized = path.split(sep).join("/");
   const parts = normalized.split("/");
   const name = parts.at(-1).toLowerCase();
-  if (parts.some((part) => [".git", ".openclaw", "node_modules", ".cache"].includes(part))) return true;
+  if (parts.some((part) => [".git", ".openclaw", ".ssh", "secrets", "node_modules", ".cache"].includes(part))) return true;
   if (name === ".openclaw-workspace-volume.json") return true;
   if (name === ".env" || name.startsWith(".env.")) return true;
   if (["auth.json", "credentials.json", "id_rsa", "id_ed25519"].includes(name)) return true;
