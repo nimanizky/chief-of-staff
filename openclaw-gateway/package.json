@@ -3,8 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node test-bootstrap.mjs && node test-migrate-workspace.mjs && node memory-sync/test.mjs" },
-  "overrides": { "openclaw": { "npm": "12.2.3" } },
+  "scripts": {
+    "test": "node test-bootstrap.mjs && node test-migrate-workspace.mjs && node memory-sync/test.mjs && node mcp-server/test.mjs"
+  },
+  "overrides": {
+    "openclaw": {
+      "npm": "12.2.3"
+    }
+  },
   "dependencies": {
     "openclaw": "2026.11.6",
     "@openclaw/whatsapp": "2026.11.6"

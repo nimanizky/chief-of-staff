@@ -2,9 +2,9 @@
 
 Independent OpenClaw gateway with an isolated Browserless container and the official WhatsApp plugin.
 No finance application code or finance database is bundled. On first boot it
-creates a generic config in the persistent state directory; an optional generic
-Streamable HTTP MCP endpoint is configured using `MCP_SERVER_URL` and
-`MCP_SERVER_TOKEN`. More servers can be configured through OpenClaw itself.
+creates a generic config in the persistent state directory. An optional generic
+external MCP service can be configured using MCP_SERVER_URL and MCP_SERVER_TOKEN;
+the separate ChatGPT-facing MCP endpoint described below is disabled by default.
 
 ## Persistent state and workspace
 
@@ -110,3 +110,55 @@ state or finance credentials. Browserless sessions may be ephemeral; persistent
 site login and interactive authentication have not yet been validated. See
 [service separation](../docs/service-separation.md) before any deployment,
 browser login, or cutover from the legacy gateway.
+
+## ChatGPT-facing MCP endpoint
+
+The gateway can optionally expose a remote, Streamable HTTP MCP server for ChatGPT and other MCP clients. It runs in the same container as the Gateway so it can call the local OpenClaw CLI and access the same persistent /workspace volume without copying WhatsApp credentials or Gateway state into another container.
+
+The endpoint is **disabled by default**. When enabled, the supervisor waits for the Gateway health check before starting the MCP listener. The MCP listener is not published as a host port by Compose; route it through a trusted HTTPS reverse proxy or tunnel on the existing chief-of-staff-services Docker network. Do not expose the OpenClaw Gateway port (18789) to ChatGPT.
+
+### Available tools
+
+| Tool | Scope | Purpose |
+| --- | --- | --- |
+| whatsapp_list_groups | openclaw.read | List WhatsApp group sessions already known to OpenClaw |
+| whatsapp_read_group_messages | openclaw.read | Read recent messages from one group's OpenClaw session transcript |
+| whatsapp_send_group_message | openclaw.read + openclaw.write | Send a text message to a known WhatsApp group |
+| workspace_list_notes | openclaw.read | List Markdown notes in /workspace |
+| workspace_read_note | openclaw.read | Read one Markdown note |
+| workspace_write_note | openclaw.write | Create a note or explicitly overwrite an existing note |
+
+WhatsApp history is read through the Gateway sessions.list and chat.history RPCs. The read tool returns only the transcript content OpenClaw retained for the group session; it is **not** a guaranteed full export of every message in the WhatsApp group. Groups without an existing OpenClaw session are not listed. The send tool only accepts a group JID that is already present in the OpenClaw session list. It is marked as an externally visible write action, and the caller should confirm the exact recipient and message before sending.
+
+Workspace tools operate only on Markdown files under /workspace. They reject absolute paths, traversal, symlinks, hidden/configuration directories, and non-Markdown files. Existing notes are not overwritten unless overwrite=true is explicit. A successful write means the local workspace file was saved; the Obsidian Git push is asynchronous and depends on the separate memory-sync worker being configured and healthy.
+
+### OAuth and public endpoint setup
+
+The MCP server is a **resource server**, not an OAuth authorization server. Use an established OAuth 2.1 identity provider. The provider must support the MCP authorization-code flow with PKCE S256, refresh tokens, ChatGPT's Client ID Metadata Documents (CIMD) or Dynamic Client Registration (DCR), and the resource parameter. It must issue JWT access tokens with a signing key published through JWKS and an audience/resource claim matching this MCP server.
+
+Configure the following values in the gateway .env file:
+
+~~~dotenv
+MCP_SERVER_ENABLED=true
+MCP_BIND_HOST=0.0.0.0
+MCP_PORT=3200
+MCP_PUBLIC_URL=https://mcp.example.com
+MCP_OAUTH_ISSUER=https://your-identity-provider.example/
+MCP_OAUTH_JWKS_URL=https://your-identity-provider.example/.well-known/jwks.json
+MCP_OAUTH_AUDIENCE=https://mcp.example.com
+MCP_OAUTH_ALLOWED_SUBJECT=the-exact-stable-sub-claim-for-your-user
+MCP_OAUTH_SCOPE_READ=openclaw.read
+MCP_OAUTH_SCOPE_WRITE=openclaw.write
+~~~
+
+MCP_PUBLIC_URL is the public HTTPS **origin**, without /mcp. The reverse proxy must route both https://mcp.example.com/mcp and https://mcp.example.com/.well-known/oauth-protected-resource to http://gateway:3200 on the private Docker network. The audience/resource value issued by the identity provider must exactly match MCP_PUBLIC_URL. MCP_OAUTH_ISSUER must exactly match the token's iss claim, including any trailing slash. MCP_OAUTH_ALLOWED_SUBJECT is required and restricts this personal server to one stable identity-provider subject. Tokens are checked for signature, issuer, audience, expiry, not-before, and required scopes on every tool call. Supported JWT signature algorithms are RS256, PS256, and ES256.
+
+Keep MCP_BIND_HOST=127.0.0.1 if only local access is needed. Set it to 0.0.0.0 only when a reverse proxy on the same private Docker network needs to reach the service. Compose does not publish port 3200 on the host. Keep the reverse proxy and OAuth provider configuration private and do not replace OAuth with a static bearer token.
+
+After configuring the provider and reverse proxy, connect ChatGPT to:
+
+~~~text
+https://mcp.example.com/mcp
+~~~
+
+Choose OAuth authentication in the custom MCP server connection. The server publishes its protected-resource metadata at /.well-known/oauth-protected-resource and declares read/write scopes on each tool. No additional npm dependencies are needed for this MCP endpoint; it uses Node's built-in HTTP, crypto, filesystem, and child-process APIs.
