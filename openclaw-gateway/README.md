@@ -127,10 +127,15 @@ The endpoint is **disabled by default**. When enabled, the supervisor waits for 
 | workspace_list_notes | openclaw.read | List Markdown notes in /workspace |
 | workspace_read_note | openclaw.read | Read one Markdown note |
 | workspace_write_note | openclaw.write | Create a note or explicitly overwrite an existing note |
+| workspace_sync | openclaw.write | Trigger an immediate sync through the shared GitHub Actions workflow |
 
 WhatsApp history is read through the Gateway sessions.list and chat.history RPCs. The read tool returns only the transcript content OpenClaw retained for the group session; it is **not** a guaranteed full export of every message in the WhatsApp group. Groups without an existing OpenClaw session are not listed. The send tool only accepts a group JID that is already present in the OpenClaw session list. It is marked as an externally visible write action, and the caller should confirm the exact recipient and message before sending.
 
-Workspace tools operate only on Markdown files under /workspace. They reject absolute paths, traversal, symlinks, hidden/configuration directories, and non-Markdown files. Existing notes are not overwritten unless overwrite=true is explicit. A successful write means the local workspace file was saved; the Obsidian Git push is asynchronous and depends on the separate memory-sync worker being configured and healthy.
+Workspace tools operate only on Markdown files under /workspace. They reject absolute paths, traversal, symlinks, hidden/configuration directories, and non-Markdown files. Existing notes are not overwritten unless overwrite=true is explicit. A successful write saves the note locally; the background memory-sync worker commits and pushes changes automatically using MEMORY_SYNC_INTERVAL_SECONDS (default 60 seconds).
+
+The `workspace_sync` tool is the explicit **sync now** action. It dispatches the same GitHub Actions workflow exposed in **Actions → OpenClaw to Obsidian manual sync**. GitHub Actions connects to the VPS over SSH and runs the existing memory-sync CLI against the persistent workspace. The tool returns when the workflow has been queued, not when the Git push has finished; use the GitHub Actions run for the final result. The background worker continues independently, so this is an additional immediate trigger rather than a replacement for automatic sync.
+
+To enable `workspace_sync`, configure `MCP_SYNC_GITHUB_TOKEN` in the gateway `.env` with a fine-grained GitHub token restricted to `nimanizky/chief-of-staff` and the **Actions: read and write** repository permission. The repository, workflow filename, and target ref default to `nimanizky/chief-of-staff`, `openclaw-obsidian-manual-sync.yml`, and `main`; they can be overridden with `MCP_SYNC_GITHUB_REPOSITORY`, `MCP_SYNC_GITHUB_WORKFLOW`, and `MCP_SYNC_GITHUB_REF`. The token is used only by the MCP server to dispatch the workflow; it is not sent to the VPS or Obsidian vault.
 
 ### OAuth and public endpoint setup
 
@@ -149,6 +154,10 @@ MCP_OAUTH_AUDIENCE=https://mcp.example.com
 MCP_OAUTH_ALLOWED_SUBJECT=the-exact-stable-sub-claim-for-your-user
 MCP_OAUTH_SCOPE_READ=openclaw.read
 MCP_OAUTH_SCOPE_WRITE=openclaw.write
+MCP_SYNC_GITHUB_TOKEN=github_pat_replace_me
+MCP_SYNC_GITHUB_REPOSITORY=nimanizky/chief-of-staff
+MCP_SYNC_GITHUB_WORKFLOW=openclaw-obsidian-manual-sync.yml
+MCP_SYNC_GITHUB_REF=main
 ~~~
 
 MCP_PUBLIC_URL is the public HTTPS **origin**, without /mcp. The reverse proxy must route both https://mcp.example.com/mcp and https://mcp.example.com/.well-known/oauth-protected-resource to http://gateway:3200 on the private Docker network. The audience/resource value issued by the identity provider must exactly match MCP_PUBLIC_URL. MCP_OAUTH_ISSUER must exactly match the token's iss claim, including any trailing slash. MCP_OAUTH_ALLOWED_SUBJECT is required and restricts this personal server to one stable identity-provider subject. Tokens are checked for signature, issuer, audience, expiry, not-before, and required scopes on every tool call. Supported JWT signature algorithms are RS256, PS256, and ES256.
