@@ -206,6 +206,22 @@ export function createMcpHttpServer({
       const result = await dispatch(body, request);
       sendJson(response, 200, { jsonrpc: "2.0", id: body.id, result }, { "MCP-Protocol-Version": protocolVersion });
     } catch (error) {
+      if (error instanceof OAuthError) {
+        const challenge = createAuthChallenge({
+          publicUrl,
+          error: error.code,
+          description: error.message,
+          scope: error.requiredScope
+        });
+        sendJson(response, 401, {
+          error: error.code,
+          message: error.message
+        }, {
+          "WWW-Authenticate": challenge,
+          "MCP-Protocol-Version": protocolVersion
+        });
+        return;
+      }
       sendJson(response, 200, {
         jsonrpc: "2.0",
         id: body.id,
@@ -252,27 +268,10 @@ export function createMcpHttpServer({
     const requiredScopes = tool._meta.securitySchemes[0].scopes;
     const authorization = request.headers.authorization || "";
     const tokenMatch = /^Bearer\s+(.+)$/i.exec(authorization);
-    try {
-      if (!tokenMatch) throw new OAuthError("invalid_token", "No OAuth access token was provided.");
-      const identity = await verifyToken(tokenMatch[1], requiredScopes);
-      if (identity.subject !== config.MCP_OAUTH_ALLOWED_SUBJECT) {
-        throw new OAuthError("insufficient_scope", "This OAuth account is not authorized for this personal OpenClaw server.", requiredScopes.join(" "));
-      }
-    } catch (error) {
-      if (error instanceof OAuthError) {
-        const challenge = createAuthChallenge({
-          publicUrl,
-          error: error.code,
-          description: error.message,
-          scope: error.requiredScope || requiredScopes.join(" ")
-        });
-        return {
-          isError: true,
-          content: [{ type: "text", text: error.message }],
-          _meta: { "mcp/www_authenticate": [challenge] }
-        };
-      }
-      return toolError("The OAuth access token could not be verified. Try reconnecting the app.");
+    if (!tokenMatch) throw new OAuthError("invalid_token", "No OAuth access token was provided.", requiredScopes.join(" "));
+    const identity = await verifyToken(tokenMatch[1], requiredScopes);
+    if (identity.subject !== config.MCP_OAUTH_ALLOWED_SUBJECT) {
+      throw new OAuthError("insufficient_scope", "This OAuth account is not authorized for this personal OpenClaw server.", requiredScopes.join(" "));
     }
 
     try {

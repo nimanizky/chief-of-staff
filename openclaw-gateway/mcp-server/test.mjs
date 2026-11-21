@@ -155,18 +155,17 @@ try {
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "whatsapp_list_groups", arguments: {} } })
   });
-  const unauthorizedBody = await unauthorized.json();
-  assert.equal(unauthorizedBody.result.isError, true);
-  assert.match(unauthorizedBody.result._meta["mcp/www_authenticate"][0], /oauth-protected-resource/);
+  assert.equal(unauthorized.status, 401);
+  assert.match(unauthorized.headers.get("www-authenticate"), /oauth-protected-resource/);
+  assert.match(unauthorized.headers.get("www-authenticate"), /scope="openclaw.read"/);
 
   const wrongUser = await fetch(`${base}/mcp`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json", authorization: "Bearer wrong-user-token" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "whatsapp_list_groups", arguments: {} } })
   });
-  const wrongUserBody = await wrongUser.json();
-  assert.equal(wrongUserBody.result.isError, true);
-  assert.match(wrongUserBody.result._meta["mcp/www_authenticate"][0], /insufficient_scope/);
+  assert.equal(wrongUser.status, 401);
+  assert.match(wrongUser.headers.get("www-authenticate"), /insufficient_scope/);
 
   const authorized = await fetch(`${base}/mcp`, {
     method: "POST",
