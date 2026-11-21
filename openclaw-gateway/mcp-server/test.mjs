@@ -8,7 +8,7 @@ import { createWorkspaceAdapter } from "./workspace.mjs";
 import { createJwtVerifier } from "./auth.mjs";
 import { generateKeyPairSync, sign } from "node:crypto";
 
-const groupJid = "120363123456789-123456789012345@g.us";
+const groupJid = "120363401234567890@g.us";
 const groupRow = {
   key: `agent:main:whatsapp:group:${groupJid}`,
   channel: "whatsapp",
@@ -19,6 +19,7 @@ const groupRow = {
 };
 
 assert.equal(parseWhatsAppGroupSession(groupRow).group_jid, groupJid);
+assert.equal(parseWhatsAppGroupSession({ ...groupRow, key: "agent:main:whatsapp:group:120363401234567890-123456789@g.us" }).group_jid, "120363401234567890-123456789@g.us");
 assert.equal(parseWhatsAppGroupSession({ ...groupRow, channel: "telegram" }), null);
 assert.equal(parseWhatsAppGroupSession({ ...groupRow, key: "agent:main:whatsapp:direct:628123456789" }), null);
 

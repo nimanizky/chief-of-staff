@@ -32,7 +32,7 @@ export function createToolDefinitions({ readScope = "openclaw.read", writeScope 
       title: "Read WhatsApp group messages",
       description: "Read recent messages from the OpenClaw transcript for one known WhatsApp group. This returns messages retained in the OpenClaw session, not a guaranteed complete raw WhatsApp export. If multiple sessions exist, provide agent_id and account_id from whatsapp_list_groups.",
       inputSchema: jsonSchema("object", {
-        group_jid: { type: "string", pattern: "^[0-9]{5,}-[0-9]{5,}@g\\.us$" },
+        group_jid: { type: "string", pattern: "^[0-9]{5,}(?:-[0-9]{5,})?@g\\.us$" },
         agent_id: { type: "string" },
         account_id: { type: "string" },
         limit: { type: "integer", minimum: 1, maximum: 100, default: 50 }
@@ -45,7 +45,7 @@ export function createToolDefinitions({ readScope = "openclaw.read", writeScope 
       title: "Send a WhatsApp group message",
       description: "Send a text message to an existing WhatsApp group known to OpenClaw. This is externally visible. Confirm the exact recipient and message with the user before calling this tool. Provide agent_id/account_id when the group has multiple sessions.",
       inputSchema: jsonSchema("object", {
-        group_jid: { type: "string", pattern: "^[0-9]{5,}-[0-9]{5,}@g\\.us$" },
+        group_jid: { type: "string", pattern: "^[0-9]{5,}(?:-[0-9]{5,})?@g\\.us$" },
         message: { type: "string", minLength: 1, maxLength: MAX_MESSAGE_LENGTH },
         agent_id: { type: "string" },
         account_id: { type: "string" }
