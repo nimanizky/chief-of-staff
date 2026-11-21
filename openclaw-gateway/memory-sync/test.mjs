@@ -9,7 +9,7 @@ const local = join(root, "legacy-workspace");
 const remote = join(root, "remote-vault");
 
 try {
-  await mkdir(local, { recursive: true });
+  await mkdir(join(local, "memory"), { recursive: true });
   await mkdir(remote, { recursive: true });
   await mkdir(join(remote, "memory"), { recursive: true });
 
