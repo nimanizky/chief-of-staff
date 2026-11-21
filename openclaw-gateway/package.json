@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node test-bootstrap.mjs" },
+  "scripts": { "test": "node test-bootstrap.mjs && node --test test-whatsapp-handoff.mjs" },
   "overrides": { "openclaw": { "npm": "12.2.3" } },
   "dependencies": {
     "openclaw": "2026.11.6",
