@@ -1,0 +1,64 @@
+name: OpenClaw gateway CI and deployment
+on:
+  pull_request:
+    paths: ["openclaw-gateway/**", ".github/workflows/openclaw-gateway.yml"]
+  push:
+    branches: [main]
+    paths: ["openclaw-gateway/**", ".github/workflows/openclaw-gateway.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openclaw-gateway
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: openclaw-gateway/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npx --no-install openclaw --version
+      - run: docker build -t chief-openclaw:ci .
+
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && vars.ENABLE_OPENCLAW_AUTO_DEPLOY == 'true'))
+    needs: build-test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$VPS_SSH_KEY" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+      - name: Deploy gateway
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -eu
+          port="${VPS_PORT:-22}"
+          user="${VPS_USER:-root}"
+          ssh_cmd="ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p $port"
+          $ssh_cmd "$user@$VPS_HOST" 'mkdir -p /opt/chief-of-staff/openclaw-gateway'
+          rsync -az --delete --exclude='/.env' --exclude='/.openclaw/' --exclude='/node_modules/' -e "$ssh_cmd" openclaw-gateway/ "$user@$VPS_HOST:/opt/chief-of-staff/openclaw-gateway/"
+          $ssh_cmd "$user@$VPS_HOST" 'set -eu; cd /opt/chief-of-staff/openclaw-gateway; test -s .env; docker network inspect chief-of-staff-services >/dev/null 2>&1 || docker network create chief-of-staff-services >/dev/null; docker compose up -d --build'

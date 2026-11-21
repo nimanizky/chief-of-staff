@@ -1,0 +1,27 @@
+services:
+  gateway:
+    build: .
+    env_file: ${GATEWAY_ENV_PATH:-.env}
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+    networks: [services, browser-network]
+    restart: unless-stopped
+  browser:
+    image: ghcr.io/browserless/chromium:v2.63.1
+    environment:
+      TOKEN: ${BROWSER_TOKEN:?Set BROWSER_TOKEN in the Compose environment}
+      EXTERNAL: ws://browser:3000
+      CONCURRENT: "1"
+    init: true
+    shm_size: 512m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [browser-network]
+    restart: unless-stopped
+volumes:
+  openclaw-state:
+networks:
+  browser-network:
+  services:
+    external: true
+    name: chief-of-staff-services

@@ -1,0 +1,9 @@
+{
+  "gateway": { "mode": "local", "bind": "loopback", "auth": { "mode": "token" } },
+  "browser": { "enabled": true, "defaultProfile": "isolated", "profiles": { "isolated": { "cdpUrl": "ws://browser:3000?token=${BROWSER_TOKEN}", "attachOnly": true } } },
+  "tools": { "alsoAllow": ["browser"] },
+  "plugins": {
+    "load": { "paths": ["/app/node_modules/@openclaw/whatsapp"] },
+    "entries": { "whatsapp": { "enabled": true } }
+  }
+}

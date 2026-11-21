@@ -1,9 +1,7 @@
 name: Create version tag and start deployment
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 concurrency:
   group: create-openclaw-version-tag

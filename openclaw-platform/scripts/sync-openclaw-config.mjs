@@ -32,6 +32,16 @@ async function readJsonIfExists(path) {
 function rewriteLocalPathsForRuntime(config) {
   if (process.cwd() !== "/app") return;
 
+  // The Docker gateway runs as root, so Chromium needs --no-sandbox there.
+  // Keep these Linux-specific settings out of host installations.
+  config.browser = {
+    ...config.browser,
+    enabled: true,
+    headless: true,
+    noSandbox: true,
+    executablePath: "/usr/bin/chromium"
+  };
+
   const replacements = new Map([
     ["/Users/nurrizky/dev/chief-of-staff/openclaw-platform/hooks", "/app/hooks"],
     ["/Users/nurrizky/dev/chief-of-staff/openclaw-platform/plugins/task-gate", "/app/plugins/task-gate"]

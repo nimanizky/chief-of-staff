@@ -17,6 +17,9 @@
       "thinkingDefault": "off"
     }
   },
+  "tools": {
+    "alsoAllow": ["browser"]
+  },
   "channels": {
     "telegram": {
       "enabled": true,

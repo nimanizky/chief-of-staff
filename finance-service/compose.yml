@@ -1,0 +1,30 @@
+services:
+  finance:
+    build: .
+    env_file: ${FINANCE_ENV_FILE:-.env}
+    environment:
+      FINANCE_API_ENABLED: "true"
+      FINANCE_API_BIND_HOST: 0.0.0.0
+      FINANCE_SQLITE_PATH: /data/finance.sqlite
+    volumes:
+      - finance-data:/data
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST}:/run/secrets/google-service-account.json:ro
+    networks: [services]
+    restart: unless-stopped
+  sheet-sync:
+    build: .
+    env_file: ${FINANCE_ENV_FILE:-.env}
+    command: ["npm", "run", "sync"]
+    environment:
+      FINANCE_SQLITE_PATH: /data/finance.sqlite
+    volumes:
+      - finance-data:/data
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST}:/run/secrets/google-service-account.json:ro
+    networks: [services]
+    restart: unless-stopped
+volumes:
+  finance-data:
+networks:
+  services:
+    external: true
+    name: chief-of-staff-services
