@@ -19,6 +19,7 @@ import { promisify } from "node:util";
 const execFile = promisify(execFileCallback);
 const SAFE_GITIGNORE_RULES = [
   ".openclaw-workspace-volume.json",
+  ".memory-sync.lock/",
   ".ssh/",
   "secrets/",
   ".env",
@@ -46,7 +47,7 @@ export function isIgnoredPath(path) {
   const normalized = path.split(sep).join("/");
   const parts = normalized.split("/");
   const name = parts.at(-1).toLowerCase();
-  if (parts.some((part) => [".git", ".openclaw", ".ssh", "secrets", "node_modules", ".cache"].includes(part))) return true;
+  if (parts.some((part) => [".git", ".openclaw", ".ssh", "secrets", "node_modules", ".cache", ".memory-sync.lock"].includes(part))) return true;
   if (name === ".openclaw-workspace-volume.json") return true;
   if (name === ".env" || name.startsWith(".env.")) return true;
   if (["auth.json", "credentials.json", "id_rsa", "id_ed25519"].includes(name)) return true;
@@ -140,6 +141,26 @@ export async function ensureSafeGitignore(workspaceDir) {
 }
 
 export async function syncOnce(options = {}) {
+  const workspaceDir = resolve(options.workspaceDir || process.env.MEMORY_SYNC_WORKSPACE_DIR || "/workspace");
+  await mkdir(workspaceDir, { recursive: true });
+  const lockDir = join(workspaceDir, ".memory-sync.lock");
+  try {
+    await mkdir(lockDir, { mode: 0o700 });
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new Error("Another Obsidian sync is already running. Wait for it to finish, then retry.");
+    }
+    throw error;
+  }
+
+  try {
+    return await syncOnceUnlocked({ ...options, workspaceDir });
+  } finally {
+    await rm(lockDir, { recursive: true, force: true });
+  }
+}
+
+async function syncOnceUnlocked(options = {}) {
   const workspaceDir = resolve(options.workspaceDir || process.env.MEMORY_SYNC_WORKSPACE_DIR || "/workspace");
   const remoteUrl = options.remoteUrl || process.env.MEMORY_SYNC_REMOTE || "git@github.com:nimanizky/openclaw-obsidian-vault.git";
   const branch = options.branch || process.env.MEMORY_SYNC_BRANCH || "main";
