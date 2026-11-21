@@ -406,7 +406,7 @@ async function runCli() {
     try {
       const result = await syncOnce();
       console.log(JSON.stringify(result, null, 2));
-      if (result.status === "waiting_for_key") process.exitCode = 2;
+      if (result.status === "waiting_for_key" && command !== "bootstrap") process.exitCode = 2;
     } catch (error) {
       if (command === "bootstrap") {
         console.error(`[memory-sync-init] ${error.message}; gateway will continue with local persistent memory.`);
