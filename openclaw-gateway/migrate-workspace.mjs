@@ -187,7 +187,7 @@ function isExcluded(path) {
   if (parts.some((part) => [".git", ".openclaw", ".ssh", "secrets", "node_modules", ".cache"].includes(part))) return true;
   if (name === ".env" || name.startsWith(".env.")) return true;
   if (["auth.json", "credentials.json", "id_rsa", "id_ed25519"].includes(name)) return true;
-  return /\.(sqlite3?|db|pem|key|p12|pfx)$/i.test(name);
+  return /\.(sqlite3?|db|pem|key|p12|pfx|crt|cer|secret|token|log)$/i.test(name);
 }
 
 async function hashFile(path) {
