@@ -2,6 +2,18 @@
 
 Experimental and off by default. Validate on a dedicated test account first.
 
+An owner can also ask OpenClaw to initiate a new conversation and continue it.
+The `whatsapp_handoff` tool's `initiate` action sends the first text using the
+active WhatsApp connection, then records a one-hour handoff for that recipient.
+The owner must provide the recipient, initial message and task goal. No shell
+command or separate registration is needed for the conversation.
+
+This only applies when the agent actually chooses `whatsapp_handoff` with
+`initiate`: the generic message tool does not automatically grant access.
+Handoff state is written after the send succeeds, so an exceptionally fast
+reply can arrive before admission is enabled. If state persistence fails after
+delivery, verify the conversation before retrying to avoid duplicate messages.
+
 1. Send a normal WhatsApp DM from the linked phone while the gateway is online.
    The gateway remembers the contact, but takes no action. Their reply is
    visible in the WhatsApp app even if OpenClaw ignores it.
@@ -37,7 +49,7 @@ an allowed sender. Configure `session.dmScope` as `per-channel-peer` or
 - Tests exercise persisted handoff state, owner gating, prompt and tool hooks,
   and patch anchor/syntax checks against the pinned plugin. No live WhatsApp
   test has been performed. Verify handset observation, owner-tool visibility,
-  a real auto-reply, no reply to an unknown sender, and expiry/revocation
+  owner-initiated first message, a real auto-reply, no reply to an unknown sender, and expiry/revocation
   before enabling on the primary number.
 - No per-message approval, proactive reply to a previous inbound message,
   or automatic detection of task completion.
