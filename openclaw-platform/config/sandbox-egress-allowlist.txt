@@ -1,6 +1,0 @@
-api.openai.com
-api.mistral.ai
-sheets.googleapis.com
-oauth2.googleapis.com
-www.googleapis.com
-api.telegram.org
