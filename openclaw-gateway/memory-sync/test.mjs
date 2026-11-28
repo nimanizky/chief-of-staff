@@ -51,6 +51,7 @@ try {
   await assert.rejects(readFile(join(remote, "client.crt"), "utf8"));
   await assert.rejects(readFile(join(remote, "session.log"), "utf8"));
 
+  assert.equal(isIgnoredPath(".memory-sync.lock/owner.json"), true);
   await ensureSafeGitignore(remote);
   const gitignore = await readFile(join(remote, ".gitignore"), "utf8");
   assert.match(gitignore, /\.env/);

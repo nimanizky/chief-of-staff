@@ -41,9 +41,16 @@ services:
     environment:
       OPENCLAW_STATE_DIR: /home/node/.openclaw
       OPENCLAW_WORKSPACE_DIR: /workspace
+      # Bind inside the container; host access is restricted to loopback below.
+      MCP_BIND_HOST: 0.0.0.0
     volumes:
       - openclaw-state:/home/node/.openclaw
       - openclaw-workspace:/workspace
+    expose:
+      - "3200"
+    ports:
+      # Host-level reverse proxies can reach MCP without publishing it publicly.
+      - "127.0.0.1:${MCP_HOST_PORT:-3200}:3200"
     depends_on:
       memory-sync-init:
         condition: service_completed_successfully
