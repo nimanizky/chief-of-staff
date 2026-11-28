@@ -27,10 +27,11 @@ assert.equal(parseWhatsAppGroupSession({ ...groupRow, key: "agent:main:whatsapp:
 const gatewayCalls = [];
 const cliCalls = [];
 const adapter = createOpenClawAdapter({
+  groupAllowlist: groupJid,
   runCli: async (args) => {
     cliCalls.push(args);
     if (args[0] === "gateway" && args[2] === "sessions.list") {
-      return { sessions: [groupRow], hasMore: false };
+      return { sessions: [groupRow, { ...groupRow, key: "agent:main:whatsapp:group:120363401234567899@g.us" }], hasMore: false };
     }
     if (args[0] === "gateway" && args[2] === "chat.history") {
       gatewayCalls.push(JSON.parse(args[4]));
@@ -49,6 +50,12 @@ const sent = await adapter.sendWhatsAppGroupMessage({ groupJid, message: "Test m
 assert.equal(sent.sent, true);
 assert.ok(cliCalls.at(-1).includes("--target"));
 assert.ok(cliCalls.at(-1).includes(groupJid));
+const deniedJid = "120363401234567899@g.us";
+const callsBeforeDenial = cliCalls.length;
+await assert.rejects(adapter.readWhatsAppGroupMessages({ groupJid: deniedJid }), /not allowed/);
+await assert.rejects(adapter.sendWhatsAppGroupMessage({ groupJid: deniedJid, message: "Blocked" }), /not allowed/);
+assert.equal(cliCalls.length, callsBeforeDenial);
+assert.deepEqual(await createOpenClawAdapter({ groupAllowlist: "*", runCli: () => assert.fail("unexpected CLI call") }).listWhatsAppGroups(), []);
 
 let dispatchRequest;
 const syncAdapter = createSyncAdapter({

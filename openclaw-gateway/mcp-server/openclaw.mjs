@@ -34,7 +34,11 @@ function firstString(...values) {
   return values.find((value) => typeof value === "string" && value.trim().length > 0);
 }
 
-export function createOpenClawAdapter({ runCli = runOpenClawCli } = {}) {
+export function createOpenClawAdapter({
+  runCli = runOpenClawCli,
+  groupAllowlist = process.env.MCP_WHATSAPP_GROUP_ALLOWLIST || ""
+} = {}) {
+  const allowedGroups = new Set(groupAllowlist.split(",").map((jid) => jid.trim()).filter((jid) => GROUP_JID_PATTERN.test(jid)));
   async function gatewayCall(method, params) {
     const response = await runCli([
       "gateway", "call", method,
@@ -50,6 +54,7 @@ export function createOpenClawAdapter({ runCli = runOpenClawCli } = {}) {
   }
 
   async function listWhatsAppGroups() {
+    if (!allowedGroups.size) return [];
     const groups = [];
     const seen = new Set();
     let offset = 0;
@@ -73,7 +78,7 @@ export function createOpenClawAdapter({ runCli = runOpenClawCli } = {}) {
 
       for (const row of rows) {
         const group = parseWhatsAppGroupSession(row);
-        if (!group || seen.has(group.session_key)) continue;
+        if (!group || !allowedGroups.has(group.group_jid) || seen.has(group.session_key)) continue;
         seen.add(group.session_key);
         groups.push(group);
       }
@@ -90,6 +95,7 @@ export function createOpenClawAdapter({ runCli = runOpenClawCli } = {}) {
     if (typeof groupJid !== "string" || !GROUP_JID_PATTERN.test(groupJid)) {
       throw new Error("group_jid must be a WhatsApp group JID ending in @g.us.");
     }
+    if (!allowedGroups.has(groupJid)) throw new Error("WhatsApp group is not allowed for MCP.");
     const matches = (await listWhatsAppGroups()).filter((group) =>
       group.group_jid === groupJid &&
       (!agentId || group.agent_id === agentId) &&
