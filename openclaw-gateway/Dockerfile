@@ -10,7 +10,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY bootstrap.mjs migrate-workspace.mjs docker-entrypoint.sh openclaw.example.json ./
+COPY bootstrap.mjs migrate-workspace.mjs docker-entrypoint.sh openclaw.example.json whatsapp-handoff.mjs patch-whatsapp-handoff.mjs ./
+RUN node patch-whatsapp-handoff.mjs
 RUN mkdir -p /home/node/.openclaw /workspace \
     && chown -R node:node /home/node/.openclaw /workspace
 USER node
