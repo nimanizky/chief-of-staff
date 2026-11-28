@@ -1,10 +1,10 @@
 name: OpenClaw gateway CI and deployment
 on:
   pull_request:
-    paths: ["openclaw-gateway/**", ".github/workflows/openclaw-gateway.yml"]
+    paths: ["openclaw-gateway/**", ".github/workflows/openclaw-gateway.yml", ".github/workflows/openclaw-obsidian-manual-sync.yml"]
   push:
     branches: [main]
-    paths: ["openclaw-gateway/**", ".github/workflows/openclaw-gateway.yml"]
+    paths: ["openclaw-gateway/**", ".github/workflows/openclaw-gateway.yml", ".github/workflows/openclaw-obsidian-manual-sync.yml"]
   workflow_dispatch:
 
 permissions:
@@ -31,6 +31,9 @@ jobs:
       - run: cp .env.example .env && docker compose config >/dev/null && rm .env
 
   deploy:
+    concurrency:
+      group: openclaw-gateway-production
+      cancel-in-progress: false
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
