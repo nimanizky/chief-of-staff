@@ -1,11 +1,33 @@
 services:
+  workspace-migrate:
+    build: .
+    image: chief-openclaw-gateway:local
+    command: ["node", "/app/migrate-workspace.mjs"]
+    environment:
+      OPENCLAW_LEGACY_STATE_DIR: /legacy-state
+      OPENCLAW_WORKSPACE_DIR: /workspace
+      OPENCLAW_ALLOW_EMPTY_LEGACY_WORKSPACE: ${OPENCLAW_ALLOW_EMPTY_LEGACY_WORKSPACE:-false}
+    volumes:
+      - openclaw-state:/legacy-state
+      - openclaw-workspace:/workspace
+    restart: "no"
+
   gateway:
     build: .
+    image: chief-openclaw-gateway:local
     env_file: ${GATEWAY_ENV_PATH:-.env}
+    environment:
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_WORKSPACE_DIR: /workspace
     volumes:
       - openclaw-state:/home/node/.openclaw
+      - openclaw-workspace:/workspace
+    depends_on:
+      workspace-migrate:
+        condition: service_completed_successfully
     networks: [services, browser-network]
     restart: unless-stopped
+
   browser:
     image: ghcr.io/browserless/chromium:v2.63.1
     environment:
@@ -18,8 +40,11 @@ services:
     security_opt: [no-new-privileges:true]
     networks: [browser-network]
     restart: unless-stopped
+
 volumes:
   openclaw-state:
+  openclaw-workspace:
+
 networks:
   browser-network:
   services:

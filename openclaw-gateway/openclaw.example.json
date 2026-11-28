@@ -1,4 +1,9 @@
 {
+  "agents": {
+    "defaults": {
+      "workspace": "/workspace"
+    }
+  },
   "gateway": { "mode": "local", "bind": "loopback", "auth": { "mode": "token" } },
   "browser": { "enabled": true, "defaultProfile": "isolated", "profiles": { "isolated": { "cdpUrl": "ws://browser:3000?token=${BROWSER_TOKEN}", "attachOnly": true } } },
   "tools": { "alsoAllow": ["browser"] },
