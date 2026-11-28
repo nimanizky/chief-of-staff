@@ -14,27 +14,55 @@ over the private external `chief-of-staff-services` Docker network. No finance
 port is published to the internet. An MCP client connects to
 `http://finance:3100/mcp` using the finance bearer token.
 
-The finance MCP surface has nine tools covering receipt intake, budget status,
-finance digest, and text-based installment and wealth preview/confirmation.
-Installment and wealth confirmation tokens are in-memory and expire or are lost
-when the service restarts; their confirmed writes still use Google Sheets.
-Wealth image/PDF parsing and scheduled reminder delivery are not yet exposed.
-The old application under
-`openclaw-platform/` is retained as legacy source; finance code is duplicated
-there and in `finance-service/`. The new services use separate volumes and do
-not import the legacy data. Do not point two sync workers at copied data: they
-could both write the same transactions to Google Sheets.
+The finance MCP surface has twelve tools covering receipt intake, budget status,
+finance digest, text-based installment and wealth preview/confirmation, wealth
+image/PDF parsing, the wishlist board, and a model health check. Installment and
+wealth confirmation tokens are in-memory and expire or are lost when the service
+restarts; their confirmed writes still use Google Sheets.
+
+`openclaw-platform/` has been deleted. It held a byte-for-byte copy of 45 of
+`finance-service/`'s 50 source files, so a fix had to be applied twice with
+nothing to catch a miss. `finance-service/` is now the only place finance code
+lives. Scheduled delivery moved with it: `npm run finance:digest:send` and
+`npm run budget:send` are the digest and budget-guardrail senders, both opt-in
+via `FINANCE_DIGEST_ENABLED` and `BUDGET_ALERT_ENABLED` and no-ops while
+disabled. Wire them to cron or a timer on the server; nothing schedules them
+automatically.
+
+Two capabilities did not survive the deletion, deliberately:
+
+- The OpenClaw channel-routing layer (`task-router/`, `controllers/`,
+  `handlers/`, the `receipt-gate` and `task-gate` plugins and the hook
+  pipeline). The gateway owns channel routing now, so its trigger-word
+  detection and the tests covering it went with the deleted code.
+- `calory-assistant`, which was a stub whose only behaviour was replying
+  "Calory assistant is not implemented yet". Nothing was ported. The nutrition
+  schema went too; reintroduce both together if the feature is ever built.
+
+Server-side receipt OCR also did not move. In this stack the gateway's own
+vision model reads a receipt photo and calls `preview_finance_receipt` with
+structured fields, so the Mistral/Gemini receipt-parser adapters were dropped.
+Only the wealth path still parses media server-side, because
+`parse_finance_wealth_image` handles portfolio screenshots the agent reads
+poorly. It needs `MISTRAL_API_KEY`; PDF input additionally needs
+`RECEIPT_ACCEPT_PDF=true` and the `pdftoppm` binary, which the image installs
+via `poppler-utils`.
 
 ## Local checks
 
 ```bash
 cd finance-service
 npm ci
-npm test
+npm test          # 9 suites: sqlite, finance API/MCP, receipt schema,
+                  # classification, digest, cicilan, wealth, wishlist, budget
 cd ../openclaw-gateway
 npm ci
 npm test
 ```
+
+Every suite runs offline. No suite needs Google credentials, a model key or a
+network call; `src/scripts/offline-test-env.ts` supplies placeholder values for
+the modules that validate the environment when they are imported.
 
 For Docker, create a private Docker network, provision the `.env` files based on
 the examples, and configure the gateway channels/model. Set `MCP_SERVER_URL` to
@@ -57,6 +85,10 @@ Browserless sessions may be ephemeral; persistent login is not yet validated.
 
 `.github/workflows/openclaw-gateway.yml` and `finance-service.yml` run separately
 on relevant PRs and main changes. Each runs its own checks and builds its image.
+They are the only two workflows left: `pr-checks.yml`, `deploy-vps.yml` and
+`create-release-tag.yml` covered `openclaw-platform` and were deleted with it,
+so no tag can deploy the old stack any more. Decommission the legacy containers
+and their volumes on the server by hand; nothing in CI does it.
 Deployment can be manually dispatched from `main`; push-to-main deployment is
 disabled unless the corresponding repository variable `ENABLE_OPENCLAW_AUTO_DEPLOY`
 or `ENABLE_FINANCE_AUTO_DEPLOY` is set to `true`. Configure required reviewers
@@ -71,14 +103,13 @@ The workflows use separate `/opt/chief-of-staff/openclaw-gateway` and
 containers. Pair the desired WhatsApp account only with the intended gateway;
 do not configure the old and new finance workers to sync the same data.
 
-The old automatic tag creation workflow is now manually dispatched to prevent
-changes in the retained legacy application from automatically deploying the old
-stack. Its existing tag deployment workflow remains available for explicit tags.
 
 ## Starting fresh
 
 No automatic data or session migration is configured. New volumes start empty;
-existing SQLite receipts and WhatsApp sessions stay in the legacy volumes.
+existing SQLite receipts and WhatsApp sessions stay in the legacy volumes, which
+the deletion of `openclaw-platform/` did not touch. Copy anything you still want
+off them before you remove those volumes.
 After deployment, link WhatsApp again and configure the model, Telegram and
 integrations. Do not infer that those connections or Google Sheets work until
 they have been tested on the server.

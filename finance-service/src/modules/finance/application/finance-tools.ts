@@ -42,3 +42,36 @@ export function previewWealth(text: string, id: string) {
 export async function confirmWealth(token: string) {
   return handleWealthConfirmation({ decision: "confirm", token });
 }
+
+export async function wealthImage(input: {
+  media_base64: string;
+  mime_type: string;
+  caption?: string;
+  idempotency_key: string;
+}) {
+  const { processWealthMedia } = await import("../../../usecases/wealth-assistant/process-wealth-media.js");
+  return processWealthMedia({
+    mediaBase64: input.media_base64,
+    mimeType: input.mime_type,
+    caption: input.caption,
+    idempotencyKey: input.idempotency_key
+  });
+}
+
+export async function wishlistCommand(input: { text: string; chat_id: string; source_platform?: string }) {
+  const { processWishlistAssistant } = await import("../../../usecases/wishlist-assistant/process-wishlist-assistant.js");
+  const result = await processWishlistAssistant({
+    text: input.text,
+    chatId: input.chat_id,
+    sourcePlatform: input.source_platform ?? "whatsapp"
+  });
+  return { messages: result.messages, message: result.messages.join("\n") };
+}
+
+export async function modelHealth() {
+  const { checkReceiptModelHealth, formatReceiptModelHealthMessage } = await import(
+    "../../../usecases/model-health/check-mistral-health.js"
+  );
+  const result = await checkReceiptModelHealth();
+  return { result, message: formatReceiptModelHealthMessage(result) };
+}

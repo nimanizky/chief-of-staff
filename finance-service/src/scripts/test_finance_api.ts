@@ -139,7 +139,7 @@ try {
     const listedTools = await client.listTools();
     assert.deepEqual(
       listedTools.tools.map((tool) => tool.name).sort(),
-      ["list_finance_payment_methods", "preview_finance_receipt", "record_finance_receipt", "get_finance_budget", "get_finance_digest", "preview_finance_cicilan", "confirm_finance_cicilan", "preview_finance_wealth", "confirm_finance_wealth"].sort()
+      ["list_finance_payment_methods", "preview_finance_receipt", "record_finance_receipt", "get_finance_budget", "get_finance_digest", "preview_finance_cicilan", "confirm_finance_cicilan", "preview_finance_wealth", "confirm_finance_wealth", "parse_finance_wealth_image", "run_wishlist_command", "get_model_health"].sort()
     );
 
     process.env.GOOGLE_APPLICATION_CREDENTIALS = "/nonexistent/test.json";
@@ -151,6 +151,42 @@ try {
     assert.equal(wealth.isError, undefined);
     const unconfirmed = await client.callTool({ name: "confirm_finance_wealth", arguments: { token: "any-token", user_confirmed: false } });
     assert.equal(unconfirmed.isError, true, "Wealth write must require user confirmation.");
+
+    // Tools ported from openclaw-platform. Checked offline: schema rejection and
+    // gating only, so no model or Google credentials are needed.
+    const badMedia = await client.callTool({
+      name: "parse_finance_wealth_image",
+      arguments: { media_base64: "short", mime_type: "image/png", idempotency_key: "test-wealth-image-001" }
+    });
+    assert.equal(badMedia.isError, true, "Wealth image parsing must reject an undersized base64 payload.");
+
+    const badMediaType = await client.callTool({
+      name: "parse_finance_wealth_image",
+      arguments: { media_base64: "x".repeat(64), mime_type: "text/plain", idempotency_key: "test-wealth-image-002" }
+    });
+    assert.equal(badMediaType.isError, true, "Wealth image parsing must reject a non-image, non-PDF media type.");
+
+    const wishlistDenied = await client.callTool({
+      name: "run_wishlist_command",
+      arguments: { text: "show ykc", chat_id: "not-an-allowed-group", source_platform: "whatsapp" }
+    });
+    assert.equal(wishlistDenied.isError, undefined);
+    assert.match(
+      String((wishlistDenied.structuredContent as { message?: string })?.message ?? ""),
+      /WISHLIST_ALLOWED_GROUPS/,
+      "Wishlist must refuse a chat that is not allowlisted."
+    );
+
+    const wishlistWrongPlatform = await client.callTool({
+      name: "run_wishlist_command",
+      arguments: { text: "show ykc", chat_id: "any", source_platform: "telegram" }
+    });
+    assert.equal(wishlistWrongPlatform.isError, undefined);
+    assert.match(
+      String((wishlistWrongPlatform.structuredContent as { message?: string })?.message ?? ""),
+      /not enabled for this chat/,
+      "Wishlist must stay WhatsApp-only."
+    );
 
     const mcpMethods = await client.callTool({
       name: "list_finance_payment_methods",

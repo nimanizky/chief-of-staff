@@ -7,7 +7,10 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/scripts/finance_api_server.js",
     "sync": "node dist/scripts/sync_receipt_sheets.js",
-    "test": "npm run build && node dist/scripts/test_receipt_sqlite.js && node dist/scripts/test_finance_api.js"
+    "test": "npm run build && node dist/scripts/test_receipt_sqlite.js && node dist/scripts/test_finance_api.js && node dist/scripts/validate_receipt_schema.js && node dist/scripts/check_receipt_classification.js && node dist/scripts/test_finance_digest.js && node dist/scripts/test_cicilan_assistant.js && node dist/scripts/test_wealth_assistant.js && node dist/scripts/test_wishlist_assistant.js && node dist/scripts/test_budget_guardrail.js",
+    "finance:digest:preview": "node dist/scripts/send_finance_digest.js --preview --force",
+    "finance:digest:send": "node dist/scripts/send_finance_digest.js",
+    "budget:send": "node dist/scripts/send_budget_guardrail.js"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.1",

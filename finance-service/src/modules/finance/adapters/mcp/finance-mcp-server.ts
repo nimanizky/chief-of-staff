@@ -1,5 +1,10 @@
 import { McpServer, createMcpHandler, fromJsonSchema } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
+
+/** Largest base64 media payload accepted by parse_finance_wealth_image (~6 MB of bytes). */
+const MAX_MEDIA_BASE64_LENGTH = 8 * 1024 * 1024;
+/** MCP request bodies must leave room for a base64 media payload plus JSON framing. */
+const MAX_MCP_REQUEST_BODY_BYTES = 9 * 1024 * 1024;
 import {
   FinanceReceiptInputSchema,
   FinanceReceiptRecordInputSchema,
@@ -97,13 +102,20 @@ export function createFinanceMcpServer(application: FinanceApplication): McpServ
   const confirmSchema = fromJsonSchema({ type: "object", properties: { token: { type: "string", minLength: 1, maxLength: 128 }, user_confirmed: { type: "boolean", const: true } }, required: ["token", "user_confirmed"], additionalProperties: false });
   const previews = z.object({ text: z.string().min(1).max(4000), idempotency_key: z.string().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/) }).strict();
   const confirmations = z.object({ token: z.string().min(1).max(128), user_confirmed: z.literal(true) }).strict();
+  const wealthImageSchema = fromJsonSchema({ type: "object", properties: { media_base64: { type: "string", minLength: 32, maxLength: MAX_MEDIA_BASE64_LENGTH }, mime_type: { type: "string", minLength: 3, maxLength: 128 }, caption: { type: "string", maxLength: 2000 }, idempotency_key: { type: "string", minLength: 8, maxLength: 128, pattern: "^[A-Za-z0-9._:-]+$" } }, required: ["media_base64", "mime_type", "idempotency_key"], additionalProperties: false });
+  const wishlistSchema = fromJsonSchema({ type: "object", properties: { text: { type: "string", minLength: 1, maxLength: 4000 }, chat_id: { type: "string", minLength: 1, maxLength: 128 }, source_platform: { type: "string", minLength: 1, maxLength: 32 } }, required: ["text", "chat_id"], additionalProperties: false });
+  const wealthImages = z.object({ media_base64: z.string().min(32).max(MAX_MEDIA_BASE64_LENGTH), mime_type: z.string().min(3).max(128), caption: z.string().max(2000).optional(), idempotency_key: z.string().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/) }).strict();
+  const wishlists = z.object({ text: z.string().min(1).max(4000), chat_id: z.string().min(1).max(128), source_platform: z.string().min(1).max(32).optional() }).strict();
   const tools = [
     { name: "get_finance_budget", description: "Read current budget status from the configured Google Sheet without changing it.", schema: emptySchema, readOnly: true, run: async () => (await import("../../application/finance-tools.js")).budgetStatus() },
     { name: "get_finance_digest", description: "Read weekly spend and payment calendar summary from the configured Google Sheet.", schema: emptySchema, readOnly: true, run: async () => (await import("../../application/finance-tools.js")).financeDigest() },
     { name: "preview_finance_cicilan", description: "Parse installment text and return an unsaved preview and confirmation token. Use a stable idempotency_key.", schema: previewSchema, readOnly: true, run: async (input: unknown) => { const v = previews.parse(input); return (await import("../../application/finance-tools.js")).previewCicilan(v.text, v.idempotency_key); } },
     { name: "confirm_finance_cicilan", description: "Save a previewed installment to Google Sheets only after explicit user approval. Confirmation tokens expire and do not survive a restart.", schema: confirmSchema, readOnly: false, run: async (input: unknown) => { const v = confirmations.parse(input); return (await import("../../application/finance-tools.js")).confirmCicilan(v.token); } },
     { name: "preview_finance_wealth", description: "Parse a text wealth snapshot and return an unsaved preview and confirmation token. Use a stable idempotency_key.", schema: previewSchema, readOnly: true, run: async (input: unknown) => { const v = previews.parse(input); return (await import("../../application/finance-tools.js")).previewWealth(v.text, v.idempotency_key); } },
-    { name: "confirm_finance_wealth", description: "Save a previewed wealth snapshot to Google Sheets only after explicit user approval. Confirmation tokens expire and do not survive a restart.", schema: confirmSchema, readOnly: false, run: async (input: unknown) => { const v = confirmations.parse(input); return (await import("../../application/finance-tools.js")).confirmWealth(v.token); } }
+    { name: "confirm_finance_wealth", description: "Save a previewed wealth snapshot to Google Sheets only after explicit user approval. Confirmation tokens expire and do not survive a restart.", schema: confirmSchema, readOnly: false, run: async (input: unknown) => { const v = confirmations.parse(input); return (await import("../../application/finance-tools.js")).confirmWealth(v.token); } },
+    { name: "parse_finance_wealth_image", description: "Parse a wealth snapshot out of a base64 image or single-page PDF and return an unsaved preview plus a confirmation token. Confirm with confirm_finance_wealth. Requires MISTRAL_API_KEY; PDF input also requires RECEIPT_ACCEPT_PDF and the poppler pdftoppm binary.", schema: wealthImageSchema, readOnly: true, run: async (input: unknown) => { const v = wealthImages.parse(input); return (await import("../../application/finance-tools.js")).wealthImage(v); } },
+    { name: "run_wishlist_command", description: "Run a wishlist board command (show, add, done, undone) against the Markdown memory vault and commit the change. Only chats listed in WISHLIST_ALLOWED_GROUPS are accepted.", schema: wishlistSchema, readOnly: false, run: async (input: unknown) => { const v = wishlists.parse(input); return (await import("../../application/finance-tools.js")).wishlistCommand(v); } },
+    { name: "get_model_health", description: "Check connectivity and latency of the configured receipt parsing model without changing any data.", schema: emptySchema, readOnly: true, run: async () => (await import("../../application/finance-tools.js")).modelHealth() }
   ];
   for (const tool of tools) {
     server.registerTool(tool.name, {
@@ -125,7 +137,7 @@ export function createFinanceMcpServer(application: FinanceApplication): McpServ
 
 export function createFinanceMcpHandler(application: FinanceApplication) {
   return createMcpHandler(() => createFinanceMcpServer(application), {
-    maxRequestBodySize: 64 * 1024
+    maxRequestBodySize: MAX_MCP_REQUEST_BODY_BYTES
   });
 }
 
