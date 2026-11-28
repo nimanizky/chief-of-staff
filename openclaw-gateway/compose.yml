@@ -12,6 +12,28 @@ services:
       - openclaw-workspace:/workspace
     restart: "no"
 
+  memory-sync-init:
+    build:
+      context: ./memory-sync
+    image: chief-openclaw-memory-sync:local
+    command: ["node", "/app/sync.mjs", "bootstrap"]
+    environment:
+      MEMORY_SYNC_WORKSPACE_DIR: /workspace
+      MEMORY_SYNC_REMOTE: git@github.com:nimanizky/openclaw-obsidian-vault.git
+      MEMORY_SYNC_BRANCH: main
+      MEMORY_SYNC_SSH_KEY_FILE: /run/secrets/obsidian-vault-deploy-key
+      MEMORY_SYNC_AUTHOR_NAME: OpenClaw Memory Sync
+      MEMORY_SYNC_AUTHOR_EMAIL: openclaw-memory-sync@users.noreply.github.com
+    volumes:
+      - openclaw-workspace:/workspace
+      - ../secrets:/run/secrets:ro
+    depends_on:
+      workspace-migrate:
+        condition: service_completed_successfully
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
   gateway:
     build: .
     image: chief-openclaw-gateway:local
@@ -23,9 +45,31 @@ services:
       - openclaw-state:/home/node/.openclaw
       - openclaw-workspace:/workspace
     depends_on:
-      workspace-migrate:
+      memory-sync-init:
         condition: service_completed_successfully
     networks: [services, browser-network]
+    restart: unless-stopped
+
+  memory-sync:
+    build:
+      context: ./memory-sync
+    image: chief-openclaw-memory-sync:local
+    environment:
+      MEMORY_SYNC_WORKSPACE_DIR: /workspace
+      MEMORY_SYNC_REMOTE: git@github.com:nimanizky/openclaw-obsidian-vault.git
+      MEMORY_SYNC_BRANCH: main
+      MEMORY_SYNC_INTERVAL_SECONDS: ${MEMORY_SYNC_INTERVAL_SECONDS:-60}
+      MEMORY_SYNC_SSH_KEY_FILE: /run/secrets/obsidian-vault-deploy-key
+      MEMORY_SYNC_AUTHOR_NAME: OpenClaw Memory Sync
+      MEMORY_SYNC_AUTHOR_EMAIL: openclaw-memory-sync@users.noreply.github.com
+    volumes:
+      - openclaw-workspace:/workspace
+      - ../secrets:/run/secrets:ro
+    depends_on:
+      memory-sync-init:
+        condition: service_completed_successfully
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     restart: unless-stopped
 
   browser:
